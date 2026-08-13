@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-outcome-ledger",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+
+  // Two schedules, both UTC (Cloudflare has no per-worker timezone).
+  //   30 22 * * 1-5  -> weekdays 22:30 UTC, after the US close. Prices.
+  //   15 6  * * *    -> daily 06:15 UTC. SEC fundamentals + derived outcomes.
+  // The free plan allows 5 cron triggers per account, so this uses two of them.
+  "triggers": {
+    "crons": ["30 22 * * 1-5", "15 6 * * *"]
+  },
+
+  "observability": { "enabled": true }
+
+  // Secrets are NOT listed here. Set them with `wrangler secret put`:
+  //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SEC_USER_AGENT, RUN_TOKEN
+}

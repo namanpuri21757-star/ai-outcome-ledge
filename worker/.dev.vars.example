@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local `npm run dev`. Never commit .dev.vars.
+SUPABASE_URL="https://YOUR-PROJECT-REF.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="paste-the-service-role-key"
+SEC_USER_AGENT="AI Outcome Ledger you@example.com"
+RUN_TOKEN="make-up-a-long-random-string"

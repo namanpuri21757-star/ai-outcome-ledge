@@ -1,0 +1,11 @@
+# Belt and braces. The per-package .gitignore files cover their own
+# directories, but SETUP.md has you run `git init` and `git add .` from here,
+# so anything dropped at the top level needs covering too.
+node_modules/
+dist/
+.env
+.env.local
+.dev.vars
+.wrangler/
+.DS_Store
+*.log
