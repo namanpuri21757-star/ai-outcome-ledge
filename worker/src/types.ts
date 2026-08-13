@@ -32,15 +32,12 @@ export interface XbrlFact {
 
 /** A fact normalised to exactly one fiscal quarter. */
 export interface QuarterFact {
-  /** period end, ISO date */
   end: string;
-  /** period start, ISO date */
   start: string;
   val: number;
-  /** 'reported' when the filer tagged the quarter directly, 'derived' when we subtracted */
   origin: 'reported' | 'derived';
   accn?: string;
-  fiscalPeriod: string; // CY2025Q3
+  fiscalPeriod: string;
 }
 
 export interface ObservationRow {

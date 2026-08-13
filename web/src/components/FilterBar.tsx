@@ -1,19 +1,19 @@
+import { useState } from 'react';
+import type { LedgerRow, ClaimKind, EpistemicTag, MeasurementBasis } from '../lib/types';
 import type { Filters } from '../lib/filters';
-import { EMPTY_FILTERS, isFilterActive, toggle } from '../lib/filters';
-import { BASIS_LABEL, DESTINATIONS, KIND_LABEL } from '../lib/types';
-import type { ClaimKind, EpistemicTag, LedgerRow, MeasurementBasis } from '../lib/types';
+import { isFilterActive, toggle } from '../lib/filters';
+import { BASES, DESTINATION_ORDER, GROUPS, KINDS, destination } from '../lib/labels';
 
 /**
- * One control surface, shared by every view. Filtering on the transfer map
- * and then switching to the ledger shows the same subset — that continuity is
- * the difference between a tool for finding patterns and eight separate charts.
+ * The filter wall used to be the first thing on every page: six rows of
+ * codes, open by default, before any data. It is capability the app needs
+ * and almost never the thing a reader wants first, so it collapses.
+ *
+ * Search stays visible, because search is how most people actually look
+ * for something.
  */
 export function FilterBar({
-  filters,
-  onChange,
-  rows,
-  matched,
-  onExport,
+  filters, onChange, rows, matched, onExport,
 }: {
   filters: Filters;
   onChange: (f: Filters) => void;
@@ -21,8 +21,11 @@ export function FilterBar({
   matched: number;
   onExport: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
-  const groups = uniqueGroups(rows);
+
+  const groupsPresent = [...new Set(rows.map((r) => r.group_code).filter(Boolean))] as string[];
+  groupsPresent.sort();
 
   return (
     <div className="filterbar">
@@ -30,160 +33,125 @@ export function FilterBar({
         <input
           className="search"
           type="search"
-          placeholder="Search claims, companies, measurement notes…"
+          placeholder="Search claims, companies, notes…"
           value={filters.search}
           onChange={(e) => set({ search: e.target.value })}
           aria-label="Search the ledger"
         />
-        <span className="num" style={{ color: 'var(--ink-3)', fontSize: 12 }}>
+        <button
+          type="button"
+          className={'btn ghost' + (isFilterActive(filters) ? ' has-filters' : '')}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? 'Hide filters' : 'Refine'}
+        </button>
+        <span className="matched">
           {matched} of {rows.length}
         </span>
-        <button className="btn ghost" onClick={onExport}>Export CSV</button>
-        {isFilterActive(filters) && (
-          <button className="btn ghost" onClick={() => onChange({ ...EMPTY_FILTERS })}>Clear</button>
-        )}
+        <button type="button" className="btn ghost" onClick={onExport}>
+          Export CSV
+        </button>
       </div>
 
-      <div className="filterbar-row">
-        <div className="chip-group">
-          <span className="grouplabel">Row kind</span>
-          {(Object.keys(KIND_LABEL) as ClaimKind[]).map((k) => (
-            <button
-              key={k}
-              className="chip"
-              aria-pressed={filters.kinds.includes(k)}
-              onClick={() => set({ kinds: toggle(filters.kinds, k) })}
-            >
-              {KIND_LABEL[k]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="filterbar-row">
-        <div className="chip-group">
-          <span className="grouplabel">Destination</span>
-          {[5, 4, 3, 2, 1, 0].map((d) => (
-            <button
-              key={d}
-              className="chip"
-              title={DESTINATIONS[d].long}
-              aria-pressed={filters.destinations.includes(d)}
-              onClick={() => set({ destinations: toggle(filters.destinations, d) })}
-            >
-              {d === 0 ? 'Uncoded' : `${d} ${DESTINATIONS[d].short}`}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="filterbar-row">
-        <div className="chip-group">
-          <span className="grouplabel">Basis</span>
-          {(Object.keys(BASIS_LABEL) as MeasurementBasis[]).map((b) => (
-            <button
-              key={b}
-              className="chip"
-              aria-pressed={filters.bases.includes(b)}
-              onClick={() => set({ bases: toggle(filters.bases, b) })}
-            >
-              {BASIS_LABEL[b]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="filterbar-row">
-        <div className="chip-group">
-          <span className="grouplabel">Evidence</span>
-          {[1, 2, 3].map((t) => (
-            <button
-              key={t}
-              className="chip"
-              title={`Tier ${t}`}
-              aria-pressed={filters.tiers.includes(t)}
-              onClick={() => set({ tiers: toggle(filters.tiers, t) })}
-            >
-              T{t}
-            </button>
-          ))}
-          {(['fact', 'strong', 'inference', 'speculation', 'unknown'] as EpistemicTag[]).map((t) => (
-            <button
-              key={t}
-              className="chip"
-              aria-pressed={filters.tags.includes(t)}
-              onClick={() => set({ tags: toggle(filters.tags, t) })}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-
-        <div className="chip-group">
-          <span className="grouplabel">Only</span>
-          <button
-            className="chip chip-gap"
-            aria-pressed={filters.counterpartyOnly}
-            title="Claims where a supplier's revenue line absorbed the loss"
-            onClick={() => set({ counterpartyOnly: !filters.counterpartyOnly })}
-          >
-            counterparty
-          </button>
-          <button
-            className="chip chip-gap"
-            aria-pressed={filters.conflictOnly}
-            title="The source sells the thing the number validates"
-            onClick={() => set({ conflictOnly: !filters.conflictOnly })}
-          >
-            conflicted
-          </button>
-          <button
-            className="chip chip-gap"
-            aria-pressed={filters.unverifiedOnly}
-            title="Anything without a primary source"
-            onClick={() => set({ unverifiedOnly: !filters.unverifiedOnly })}
-          >
-            unverified
-          </button>
-          <button
-            className="chip"
-            aria-pressed={filters.dollarsOnly}
-            title="Only claims carrying a dollar figure"
-            onClick={() => set({ dollarsOnly: !filters.dollarsOnly })}
-          >
-            has $
-          </button>
-        </div>
-      </div>
-
-      {groups.length > 1 && (
-        <div className="filterbar-row">
-          <div className="chip-group">
-            <span className="grouplabel">Group</span>
-            {groups.map((g) => (
-              <button
-                key={g.code}
-                className="chip"
-                title={g.label}
-                aria-pressed={filters.groups.includes(g.code)}
-                onClick={() => set({ groups: toggle(filters.groups, g.code) })}
+      {open && (
+        <>
+          <Row label="Where the gain landed">
+            {DESTINATION_ORDER.map((d) => (
+              <Chip
+                key={d}
+                on={filters.destinations.includes(d)}
+                title={destination(d).meaning}
+                onClick={() => set({ destinations: toggle(filters.destinations, d) })}
               >
-                {g.code} · {g.label}
-              </button>
+                {destination(d).name}
+              </Chip>
             ))}
-          </div>
-        </div>
+          </Row>
+
+          <Row label="What the number is">
+            {(Object.keys(BASES) as MeasurementBasis[]).map((b) => (
+              <Chip
+                key={b}
+                on={filters.bases.includes(b)}
+                title={BASES[b].meaning}
+                onClick={() => set({ bases: toggle(filters.bases, b) })}
+              >
+                {BASES[b].name}
+              </Chip>
+            ))}
+          </Row>
+
+          <Row label="Kind of row">
+            {(Object.keys(KINDS) as ClaimKind[]).map((k) => (
+              <Chip
+                key={k}
+                on={filters.kinds.includes(k)}
+                title={KINDS[k].meaning}
+                onClick={() => set({ kinds: toggle(filters.kinds, k) })}
+              >
+                {KINDS[k].name}
+              </Chip>
+            ))}
+          </Row>
+
+          <Row label="Kind of company">
+            {groupsPresent.map((g) => (
+              <Chip
+                key={g}
+                on={filters.groups.includes(g)}
+                title={GROUPS[g]?.blurb}
+                onClick={() => set({ groups: toggle(filters.groups, g) })}
+              >
+                {GROUPS[g]?.name ?? g}
+              </Chip>
+            ))}
+          </Row>
+
+          <Row label="How good the evidence is">
+            <Chip on={filters.tiers.includes(1)} title="Filings, administrative data, peer review"
+              onClick={() => set({ tiers: toggle(filters.tiers, 1) })}>Primary</Chip>
+            <Chip on={filters.tiers.includes(2)} title="Vendor- or self-originated"
+              onClick={() => set({ tiers: toggle(filters.tiers, 2) })}>Self-reported</Chip>
+            <Chip on={filters.tiers.includes(3)} title="Press or secondary reporting"
+              onClick={() => set({ tiers: toggle(filters.tiers, 3) })}>Press</Chip>
+            {(['fact', 'strong', 'inference', 'speculation', 'unknown'] as EpistemicTag[]).map((t) => (
+              <Chip key={t} on={filters.tags.includes(t)}
+                onClick={() => set({ tags: toggle(filters.tags, t) })}>{t}</Chip>
+            ))}
+          </Row>
+
+          <Row label="Only show">
+            <Chip on={filters.counterpartyOnly} title="Rows where a supplier absorbed the loss"
+              onClick={() => set({ counterpartyOnly: !filters.counterpartyOnly })}>A supplier paid</Chip>
+            <Chip on={filters.conflictOnly} title="The source sells the thing the number validates"
+              onClick={() => set({ conflictOnly: !filters.conflictOnly })}>Conflicted source</Chip>
+            <Chip on={filters.unverifiedOnly} title="Not yet checked against a primary source"
+              onClick={() => set({ unverifiedOnly: !filters.unverifiedOnly })}>Not primary-sourced</Chip>
+            <Chip on={filters.dollarsOnly} title="Rows carrying a dollar figure"
+              onClick={() => set({ dollarsOnly: !filters.dollarsOnly })}>Has a dollar figure</Chip>
+          </Row>
+        </>
       )}
     </div>
   );
 }
 
-function uniqueGroups(rows: LedgerRow[]): Array<{ code: string; label: string }> {
-  const map = new Map<string, string>();
-  for (const r of rows) {
-    if (r.group_code && !map.has(r.group_code)) map.set(r.group_code, r.group_label ?? r.group_code);
-  }
-  return [...map.entries()]
-    .map(([code, label]) => ({ code, label }))
-    .sort((a, b) => a.code.localeCompare(b.code));
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="filterbar-row">
+      <span className="grouplabel">{label}</span>
+      <div className="chip-group">{children}</div>
+    </div>
+  );
+}
+
+function Chip({
+  children, on, onClick, title,
+}: { children: React.ReactNode; on: boolean; onClick: () => void; title?: string }) {
+  return (
+    <button type="button" className="chip" aria-pressed={on} onClick={onClick} title={title}>
+      {children}
+    </button>
+  );
 }

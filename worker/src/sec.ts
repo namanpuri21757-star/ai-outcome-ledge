@@ -2,9 +2,8 @@ import type { XbrlFact } from './types';
 import { toQuarterlySeries, computeMarginSeries } from './quarterly';
 
 /**
- * SEC EDGAR XBRL. Free, no key, no registration. Two hard rules:
- *   - a User-Agent naming you and a contact email, or you get 403
- *   - stay under 10 requests a second
+ * SEC EDGAR XBRL. Free, no key. Two hard rules: a User-Agent naming you
+ * with a contact email, or you get 403; and stay under 10 requests/second.
  */
 
 export const SEC_TICKER_MAP_URL = 'https://www.sec.gov/files/company_tickers.json';
@@ -17,13 +16,9 @@ export function padCik(cik: string | number): string {
   return String(cik).replace(/\D/g, '').padStart(10, '0');
 }
 
-/**
- * Parse https://www.sec.gov/files/company_tickers.json, which is an object
- * keyed by row index rather than an array.
- *
- * Resolving CIKs at runtime instead of hardcoding them is deliberate: a wrong
- * CIK does not error, it quietly returns a different company's financials.
- */
+/** The mapping file is an object keyed by row index, not an array.
+ *  Resolving CIKs at runtime rather than hardcoding them is deliberate:
+ *  a wrong CIK does not error, it quietly returns another company. */
 export function parseTickerMap(json: unknown): Map<string, string> {
   const out = new Map<string, string>();
   if (!json || typeof json !== 'object') return out;
@@ -33,15 +28,13 @@ export function parseTickerMap(json: unknown): Map<string, string> {
     const cik = entry.cik_str ?? entry.cik;
     if (typeof ticker !== 'string' || cik === undefined) continue;
     const key = ticker.toUpperCase();
-    // First occurrence wins: the file is ordered by market cap, so for a
-    // duplicated ticker the larger filer is the intended one.
     if (!out.has(key)) out.set(key, padCik(cik));
   }
   return out;
 }
 
-/** us-gaap tags in preference order. Filers disagree about which to use, and
- *  the same filer changes over time, so every concept needs a fallback chain. */
+/** Filers disagree about which tag to use, and change over time, so every
+ *  concept needs a fallback chain. */
 export const CONCEPTS: Record<string, string[]> = {
   revenue_q: [
     'RevenueFromContractWithCustomerExcludingAssessedTax',
@@ -66,7 +59,6 @@ export interface CompanyFacts {
   facts?: { [taxonomy: string]: { [tag: string]: { units?: { [unit: string]: XbrlFact[] } } } };
 }
 
-/** Pick the first tag in the chain that the filer actually reports in USD. */
 export function pickConcept(
   facts: CompanyFacts,
   candidates: string[],
@@ -88,11 +80,6 @@ export interface ExtractedSeries {
   sourceTag?: string;
 }
 
-/**
- * Everything we want from one companyfacts payload, already normalised to
- * discrete quarters. Ratio series (margins) are computed here rather than in
- * the database so that a period mismatch can be refused rather than averaged.
- */
 export function extractSeries(facts: CompanyFacts, sinceIso = '2019-01-01'): ExtractedSeries[] {
   const out: ExtractedSeries[] = [];
   const quarterly: Record<string, ReturnType<typeof toQuarterlySeries>> = {};
@@ -130,10 +117,7 @@ export function extractSeries(facts: CompanyFacts, sinceIso = '2019-01-01'): Ext
   if (quarterly.revenue_q && quarterly.cost_of_revenue_q) {
     const rev = new Map(quarterly.revenue_q.map((r) => [r.end, r.val]));
     const gm = quarterly.cost_of_revenue_q
-      .filter((c) => {
-        const r = rev.get(c.end);
-        return r !== undefined && r > 0;
-      })
+      .filter((c) => { const r = rev.get(c.end); return r !== undefined && r > 0; })
       .map((c) => {
         const r = rev.get(c.end)!;
         return {
@@ -148,11 +132,8 @@ export function extractSeries(facts: CompanyFacts, sinceIso = '2019-01-01'): Ext
   return out;
 }
 
-/** Fetch with the required header and a clear error rather than a silent empty. */
 export async function secFetch(url: string, userAgent: string): Promise<any> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': userAgent, Accept: 'application/json' },
-  });
+  const res = await fetch(url, { headers: { 'User-Agent': userAgent, Accept: 'application/json' } });
   if (res.status === 403) {
     throw new Error(
       `SEC returned 403 for ${url}. The SEC_USER_AGENT secret must look like "Ledger name@example.com".`,

@@ -1,20 +1,15 @@
 /**
- * Stooq daily close prices. Free, keyless, undocumented.
- *
- * Because it is undocumented it fails in ways that look like success: an HTML
- * page, a one-line "Exceeded the daily hits limit" body, or a header with no
- * rows. Each of those is detected and raised here rather than being written
- * to the database as zero rows and forgotten.
+ * Stooq daily closes. Free, keyless, undocumented — and because it is
+ * undocumented it fails in ways that look like success: an HTML page, a
+ * one-line hit-limit message, or a header with no rows. Each is detected
+ * here rather than written to the database as zero rows and forgotten.
  */
 
 export function stooqUrl(symbol: string): string {
   return `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`;
 }
 
-export interface PricePoint {
-  date: string;
-  close: number;
-}
+export interface PricePoint { date: string; close: number; }
 
 export class StooqError extends Error {}
 
@@ -46,7 +41,7 @@ export function parseStooqCsv(text: string, sinceIso = '2021-01-01'): PricePoint
     const date = parts[dateIdx]?.trim();
     const raw = parts[closeIdx]?.trim();
     if (!date || !raw) continue;
-    if (raw === 'N/D' || raw === '-') continue; // Stooq's null markers
+    if (raw === 'N/D' || raw === '-') continue;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     if (date < sinceIso) continue;
     const close = Number(raw);

@@ -3,16 +3,36 @@ import type { Env } from './types';
 /**
  * A deliberately tiny PostgREST client.
  *
- * The Supabase JS SDK works on Workers, but this pipeline needs exactly four
- * verbs and no auth session handling. Dropping the dependency removes a whole
- * class of bundling and version-drift problems from a job that has to run
- * unattended on a schedule.
+ * ── The fix in this version ────────────────────────────────────────
  *
- * The service role key bypasses row level security. It lives in the
- * Cloudflare secret store and must never be given to the browser.
+ * `select` now paginates. The previous version issued one unbounded
+ * request per query and trusted the response to be complete.
+ *
+ * PostgREST applies a server-side row cap and answers a request that
+ * exceeds it with HTTP 200 and a truncated body. There is no error and
+ * no warning — the caller simply receives fewer rows than exist and has
+ * no way to tell.
+ *
+ * That is almost certainly what emptied the outcomes job. A company with
+ * daily price history carries well over a thousand observations, mostly
+ * prices; ordered by date ascending, a truncated page ends somewhere in
+ * the middle of the series and every recent quarter is missing. Claims
+ * dated in the last eighteen months then find no baseline reading, so no
+ * outcome row is written, so every margin figure in the interface reads
+ * as a dash — with a run that reports success and zero errors.
+ *
+ * Paginating with an explicit Range header removes the failure mode
+ * entirely, and `lastPageWasFull` lets a caller assert that it saw
+ * everything rather than assuming it.
  */
 
+const PAGE = 1000;
+
 export class Db {
+  /** Set after each select: true when the final page came back full,
+   *  which means the server may still be holding rows back. */
+  lastPageWasFull = false;
+
   constructor(private env: Env) {}
 
   private get base(): string {
@@ -28,15 +48,40 @@ export class Db {
     };
   }
 
-  async select<T = any>(table: string, query = ''): Promise<T[]> {
-    const url = `${this.base}/${table}${query ? '?' + query : ''}`;
-    const res = await fetch(url, { headers: this.headers() });
-    if (!res.ok) throw new Error(`select ${table} failed ${res.status}: ${await res.text()}`);
-    return res.json();
+  /**
+   * Fetch every matching row, a page at a time.
+   *
+   * `maxPages` is a guard rather than a limit: a query that needs more
+   * than fifty pages is a bug in the caller, and looping forever against
+   * a paid API is worse than stopping.
+   */
+  async select<T = any>(table: string, query = '', maxPages = 50): Promise<T[]> {
+    const out: T[] = [];
+    this.lastPageWasFull = false;
+
+    for (let page = 0; page < maxPages; page++) {
+      const from = page * PAGE;
+      const to = from + PAGE - 1;
+      const url = `${this.base}/${table}${query ? '?' + query : ''}`;
+
+      const res = await fetch(url, {
+        headers: this.headers({ Range: `${from}-${to}`, 'Range-Unit': 'items' }),
+      });
+      if (!res.ok && res.status !== 206) {
+        throw new Error(`select ${table} failed ${res.status}: ${await res.text()}`);
+      }
+
+      const batch = (await res.json()) as T[];
+      out.push(...batch);
+
+      if (batch.length < PAGE) return out;
+      if (page === maxPages - 1) this.lastPageWasFull = true;
+    }
+
+    return out;
   }
 
-  /** Insert, and on a unique-constraint hit update instead. Requires the
-   *  target table to have the matching unique index, which the schema defines. */
+  /** Insert, and on a unique-constraint hit update instead. */
   async upsert(table: string, rows: any[], onConflict?: string, chunk = 500): Promise<number> {
     let written = 0;
     for (let i = 0; i < rows.length; i += chunk) {
@@ -44,9 +89,7 @@ export class Db {
       const qs = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
       const res = await fetch(`${this.base}/${table}${qs}`, {
         method: 'POST',
-        headers: this.headers({
-          Prefer: 'resolution=merge-duplicates,return=minimal',
-        }),
+        headers: this.headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
         body: JSON.stringify(slice),
       });
       if (!res.ok) throw new Error(`upsert ${table} failed ${res.status}: ${await res.text()}`);
@@ -76,7 +119,7 @@ export class Db {
   }
 }
 
-/** Batch rows into chunks. Exported because the chunk boundary is worth testing. */
+/** Batch rows into chunks. Exported because the boundary is worth testing. */
 export function chunk<T>(rows: T[], size: number): T[][] {
   if (size <= 0) throw new Error('chunk size must be positive');
   const out: T[][] = [];

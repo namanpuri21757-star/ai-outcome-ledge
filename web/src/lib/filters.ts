@@ -1,10 +1,9 @@
 import type { ClaimKind, EpistemicTag, LedgerRow, MeasurementBasis } from './types';
+import { basis, destination, group, KINDS } from './labels';
 
 /**
- * Every view reads from one filter object. That is what makes the thing a
- * connection-making tool rather than eight separate charts: clicking a
- * counterparty on the transfer map and then switching to the ledger shows
- * you the same subset, not a fresh unfiltered table.
+ * Every view reads one filter object, so a selection made on the
+ * destinations page is still in force when you switch to the ledger.
  */
 export interface Filters {
   search: string;
@@ -41,45 +40,147 @@ export const EMPTY_FILTERS: Filters = {
 };
 
 export function isFilterActive(f: Filters): boolean {
-  return (
-    f.search.trim().length > 0 ||
-    f.kinds.length > 0 ||
-    f.bases.length > 0 ||
-    f.destinations.length > 0 ||
-    f.tags.length > 0 ||
-    f.tiers.length > 0 ||
-    f.groups.length > 0 ||
-    f.companies.length > 0 ||
-    f.counterpartyOnly ||
-    f.conflictOnly ||
-    f.unverifiedOnly ||
-    f.dollarsOnly ||
-    f.from !== null ||
-    f.to !== null
-  );
+  return activeFilterChips(f).length > 0;
+}
+
+/**
+ * The filters currently in force, as removable chips.
+ *
+ * This exists because "did my click do anything?" is a feedback question,
+ * not a logic question. The filters always worked; the interface never
+ * said so anywhere near where the click happened.
+ */
+export interface FilterChip {
+  /** Stable id, used as a React key. */
+  id: string;
+  /** What the reader sees. */
+  label: string;
+  /** Removing this chip returns these filters. */
+  clear: (f: Filters) => Filters;
+}
+
+export function activeFilterChips(f: Filters): FilterChip[] {
+  const chips: FilterChip[] = [];
+
+  if (f.search.trim()) {
+    chips.push({
+      id: 'search',
+      label: `matching “${f.search.trim()}”`,
+      clear: (x) => ({ ...x, search: '' }),
+    });
+  }
+  for (const d of f.destinations) {
+    chips.push({
+      id: `dest-${d}`,
+      label: destination(d).name.toLowerCase(),
+      clear: (x) => ({ ...x, destinations: x.destinations.filter((v) => v !== d) }),
+    });
+  }
+  for (const k of f.kinds) {
+    chips.push({
+      id: `kind-${k}`,
+      label: KINDS[k].name.toLowerCase(),
+      clear: (x) => ({ ...x, kinds: x.kinds.filter((v) => v !== k) }),
+    });
+  }
+  for (const b of f.bases) {
+    chips.push({
+      id: `basis-${b}`,
+      label: basis(b).name.toLowerCase(),
+      clear: (x) => ({ ...x, bases: x.bases.filter((v) => v !== b) }),
+    });
+  }
+  for (const g of f.groups) {
+    chips.push({
+      id: `group-${g}`,
+      label: group(g).name.toLowerCase(),
+      clear: (x) => ({ ...x, groups: x.groups.filter((v) => v !== g) }),
+    });
+  }
+  for (const c of f.companies) {
+    chips.push({
+      id: `company-${c}`,
+      label: c,
+      clear: (x) => ({ ...x, companies: x.companies.filter((v) => v !== c) }),
+    });
+  }
+  for (const t of f.tags) {
+    chips.push({
+      id: `tag-${t}`,
+      label: `${t} only`,
+      clear: (x) => ({ ...x, tags: x.tags.filter((v) => v !== t) }),
+    });
+  }
+  for (const t of f.tiers) {
+    chips.push({
+      id: `tier-${t}`,
+      label: `tier ${t}`,
+      clear: (x) => ({ ...x, tiers: x.tiers.filter((v) => v !== t) }),
+    });
+  }
+  if (f.counterpartyOnly) {
+    chips.push({
+      id: 'counterparty',
+      label: 'a supplier absorbed it',
+      clear: (x) => ({ ...x, counterpartyOnly: false }),
+    });
+  }
+  if (f.conflictOnly) {
+    chips.push({
+      id: 'conflict',
+      label: 'conflicted source',
+      clear: (x) => ({ ...x, conflictOnly: false }),
+    });
+  }
+  if (f.unverifiedOnly) {
+    chips.push({
+      id: 'unverified',
+      label: 'not primary-sourced',
+      clear: (x) => ({ ...x, unverifiedOnly: false }),
+    });
+  }
+  if (f.dollarsOnly) {
+    chips.push({
+      id: 'dollars',
+      label: 'has a dollar figure',
+      clear: (x) => ({ ...x, dollarsOnly: false }),
+    });
+  }
+  if (f.from) {
+    chips.push({ id: 'from', label: `from ${f.from}`, clear: (x) => ({ ...x, from: null }) });
+  }
+  if (f.to) {
+    chips.push({ id: 'to', label: `to ${f.to}`, clear: (x) => ({ ...x, to: null }) });
+  }
+
+  return chips;
 }
 
 function haystack(r: LedgerRow): string {
   return [
     r.company_name,
+    r.company_slug,
     r.headline,
     r.claim_detail,
     r.measurement_definition,
     r.destination_rationale,
     r.reconciliation_note,
     r.observed_counter_move,
+    r.conditions_note,
     r.counterparty_name,
     r.sector,
     r.source_name,
     r.ref,
+    destination(r.destination).name,
+    basis(r.measurement_basis).name,
+    group(r.group_code).name,
   ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
 }
 
-/** Every term must appear somewhere. Multi-word search that requires all
- *  terms is far more useful than one that requires the exact phrase. */
+/** Every term must appear somewhere in the row. */
 export function matchesSearch(row: LedgerRow, search: string): boolean {
   const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
@@ -116,8 +217,8 @@ export type SortKey =
   | 'evidence_tier'
   | 'margin_delta_4q_bps';
 
-/** Nulls always sort last regardless of direction. A missing margin delta is
- *  not "the smallest one"; it is an absence, and it should not lead the table. */
+/** Nulls sort last in both directions: an absent margin delta is not the
+ *  smallest one, and it should never lead the table. */
 export function sortRows(rows: LedgerRow[], key: SortKey, dir: 'asc' | 'desc'): LedgerRow[] {
   const mul = dir === 'asc' ? 1 : -1;
   return [...rows].sort((a, b) => {
@@ -145,10 +246,10 @@ export interface Totals {
 }
 
 /**
- * Only gain claims contribute to the money totals. Counter-evidence, context,
- * pricing and research rows carry dollar figures too — a $2T market-cap loss,
- * a $6.3B transaction, a $2B spend line — and adding them to the claimed total
- * would produce a headline number that means nothing.
+ * Only gain claims contribute to the money totals. Counter-evidence,
+ * context, pricing and research rows carry dollar figures too — a $2T
+ * market-cap loss, a $6.3B acquisition, a $2B spend line — and summing
+ * them would produce a headline number that means nothing.
  */
 export function totals(rows: LedgerRow[]): Totals {
   const gains = rows.filter((r) => r.claim_kind === 'gain_claim');
@@ -205,10 +306,10 @@ export interface TransferEdge {
 }
 
 /**
- * Who is taking money from whom. Claims where a counterparty absorbed the
- * loss but no specific firm was named collapse into one "unnamed" node,
- * because pretending we know the counterparty would be worse than admitting
- * that most of the time nobody has established it.
+ * Who is taking money from whom. Rows where a supplier absorbed the loss
+ * but no specific firm was named collapse into one unnamed node, because
+ * inventing a counterparty would be worse than admitting that most of the
+ * time nobody has established one.
  */
 export function transferEdges(rows: LedgerRow[]): TransferEdge[] {
   const map = new Map<string, TransferEdge>();
@@ -240,10 +341,13 @@ export interface ConditionCell {
   permission: boolean;
   passes: number;
   rows: LedgerRow[];
+  companies: string[];
   meanMarginDelta4qBps: number | null;
+  /** How many rows in this cell have a measured margin movement at all. */
+  measured: number;
 }
 
-/** The 2x2x2 from Part III of the source research, populated with live data. */
+/** The 2×2×2 from the source research, populated from live rows. */
 export function conditionCells(rows: LedgerRow[]): ConditionCell[] {
   const cells: ConditionCell[] = [];
   for (const billing of [true, false]) {
@@ -264,6 +368,8 @@ export function conditionCells(rows: LedgerRow[]): ConditionCell[] {
           permission,
           passes: [billing, sink, permission].filter(Boolean).length,
           rows: matched,
+          companies: [...new Set(matched.map((r) => r.company_slug))],
+          measured: deltas.length,
           meanMarginDelta4qBps: deltas.length
             ? Math.round((deltas.reduce((a, b) => a + b, 0) / deltas.length) * 10) / 10
             : null,
@@ -271,10 +377,11 @@ export function conditionCells(rows: LedgerRow[]): ConditionCell[] {
       }
     }
   }
-  return cells.sort((a, b) => b.passes - a.passes);
+  return cells.sort((a, b) => b.passes - a.passes || b.rows.length - a.rows.length);
 }
 
 /** Toggle a value in and out of a multi-select array. */
 export function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
+

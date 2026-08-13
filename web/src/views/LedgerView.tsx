@@ -1,121 +1,123 @@
 import { useMemo, useState } from 'react';
-import { ClaimDetail } from '../components/ClaimDetail';
-import { GapBar, GapLegend } from '../components/GapBar';
-import { ClaimTags } from '../components/Tag';
-import { bps, shortDate, usd } from '../lib/format';
+import type { LedgerRow } from '../lib/types';
 import { sortRows, type SortKey } from '../lib/filters';
-import { DESTINATIONS, type LedgerRow } from '../lib/types';
+import { usd, bps, shortDate, clip } from '../lib/format';
+import { basis } from '../lib/labels';
+import { GapBar } from '../components/GapBar';
+import { ClaimTags } from '../components/Tag';
+import { DestinationLadder } from '../components/DestinationLadder';
+import { ClaimCard } from '../components/ClaimCard';
 
-const COLUMNS: Array<{ key: SortKey; label: string; numeric?: boolean }> = [
-  { key: 'company_name', label: 'Company' },
-  { key: 'claim_date', label: 'Date' },
-  { key: 'claimed_amount_usd', label: 'Claimed', numeric: true },
-  { key: 'unreconciled_usd', label: 'Reconciliation' },
-  { key: 'destination', label: 'Destination' },
-  { key: 'margin_delta_4q_bps', label: 'Margin +1y', numeric: true },
-];
-
+/**
+ * The raw table, demoted to where it belongs: an appendix rather than a
+ * front door. Sort any column, open any row.
+ *
+ * Rows open into the same ClaimCard used on the company page, so a claim
+ * reads identically wherever you meet it.
+ */
 export function LedgerView({
-  rows, onFilterCompany,
-}: { rows: LedgerRow[]; onFilterCompany: (slug: string) => void }) {
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
-    key: 'claim_date', dir: 'desc',
-  });
-  const [open, setOpen] = useState<string | null>(null);
+  rows, max, onCompany,
+}: { rows: LedgerRow[]; max: number; onCompany: (slug: string, context: string) => void }) {
+  const [key, setKey] = useState<SortKey>('claim_date');
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc');
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const sorted = useMemo(() => sortRows(rows, sort.key, sort.dir), [rows, sort]);
-  const max = useMemo(
-    () => Math.max(1, ...rows.filter((r) => r.claim_kind === 'gain_claim').map((r) => r.claimed_amount_usd ?? 0)),
-    [rows],
+  const sorted = useMemo(() => sortRows(rows, key, dir), [rows, key, dir]);
+
+  const head = (k: SortKey, label: string, cls = '') => (
+    <th
+      className={cls}
+      onClick={() => {
+        if (k === key) setDir(dir === 'asc' ? 'desc' : 'asc');
+        else { setKey(k); setDir('desc'); }
+      }}
+      aria-sort={k === key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      {label} {k === key && <span className="dir">{dir === 'asc' ? '↑' : '↓'}</span>}
+    </th>
   );
-
-  const clickHeader = (key: SortKey) =>
-    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
 
   if (rows.length === 0) {
     return (
       <div className="empty">
-        <strong>Nothing matches those filters.</strong>
-        Widen the search, or clear the filters to see all rows.
+        <strong>No rows match this selection.</strong>
+        Remove a filter chip above to widen it.
       </div>
     );
   }
 
   return (
-    <>
-      <div style={{ marginBottom: 10 }}><GapLegend /></div>
-      <div className="table-wrap">
-        <table className="ledger">
-          <thead>
-            <tr>
-              <th style={{ cursor: 'default' }}>Claim</th>
-              {COLUMNS.map((c) => (
-                <th
-                  key={c.key}
-                  onClick={() => clickHeader(c.key)}
-                  style={{ textAlign: c.numeric ? 'right' : 'left' }}
-                  scope="col"
+    <div className="table-wrap">
+      <table className="ledger">
+        <thead>
+          <tr>
+            {head('company_name', 'Company')}
+            <th>Claim</th>
+            {head('claim_date', 'Date', 'num')}
+            {head('claimed_amount_usd', 'Claimed', 'num')}
+            <th>Reconciliation</th>
+            {head('destination', 'Where it landed')}
+            {head('margin_delta_4q_bps', 'Margin +1y', 'num')}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => {
+            const open = openId === r.id;
+            return (
+              <>
+                <tr
+                  key={r.id}
+                  className={open ? 'is-open' : ''}
+                  onClick={() => setOpenId(open ? null : r.id)}
                 >
-                  {c.label}
-                  {sort.key === c.key && <span className="dir"> {sort.dir === 'asc' ? '↑' : '↓'}</span>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((r) => {
-              const isOpen = open === r.id;
-              return (
-                <>
-                  <tr
-                    key={r.id}
-                    className={isOpen ? 'is-open' : ''}
-                    onClick={() => setOpen(isOpen ? null : r.id)}
-                  >
-                    <td className="claim-cell">
-                      <div className="headline">{r.headline}</div>
-                      <div className="meta"><ClaimTags row={r} /></div>
-                    </td>
-                    <td className="company-cell">
+                  <td className="company-cell">
+                    <button
+                      type="button"
+                      className="linklike"
+                      onClick={(e) => { e.stopPropagation(); onCompany(r.company_slug, 'the ledger'); }}
+                    >
                       {r.company_name}
-                      <span className="grp">{r.group_code} · {r.sector}</span>
-                    </td>
-                    <td className="num">{shortDate(r.claim_date)}</td>
-                    <td className={'num' + (r.claimed_amount_usd ? '' : ' is-null')}>
-                      {r.claimed_amount_usd ? usd(r.claimed_amount_usd) : '—'}
-                    </td>
-                    <td style={{ minWidth: 130 }}>
-                      {r.claim_kind === 'gain_claim' && r.claimed_amount_usd ? (
-                        <GapBar claimed={r.claimed_amount_usd} traced={r.traceable_to_pl_usd} max={max} />
-                      ) : (
-                        <span className="num is-null" style={{ fontSize: 11 }}>n/a</span>
-                      )}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: 13 }} title={DESTINATIONS[r.destination].long}>
-                      {r.destination === 0 ? '—' : `${r.destination} ${DESTINATIONS[r.destination].short}`}
-                    </td>
-                    <td className={'num ' + deltaClass(r.margin_delta_4q_bps)}>
-                      {bps(r.margin_delta_4q_bps)}
+                    </button>
+                    <span className="grp">{r.sector ?? ''}</span>
+                  </td>
+                  <td className="claim-cell">
+                    <div className="headline">{clip(r.headline, 110)}</div>
+                    <div className="meta"><ClaimTags row={r} /></div>
+                  </td>
+                  <td className="num">{shortDate(r.claim_date)}</td>
+                  <td className={'num ' + (r.claimed_amount_usd ? '' : 'is-null')}>
+                    {r.claimed_amount_usd ? usd(r.claimed_amount_usd) : '—'}
+                  </td>
+                  <td>
+                    {r.claimed_amount_usd ? (
+                      <GapBar claimed={r.claimed_amount_usd} traced={r.traceable_to_pl_usd} max={max} />
+                    ) : (
+                      <span className="small is-null">no dollar figure</span>
+                    )}
+                  </td>
+                  <td><DestinationLadder rank={r.destination} compact /></td>
+                  <td className={'num ' + (r.margin_delta_4q_bps === null ? 'is-null'
+                    : r.margin_delta_4q_bps > 0 ? 'is-traced' : 'is-gap')}>
+                    {bps(r.margin_delta_4q_bps)}
+                  </td>
+                </tr>
+                {open && (
+                  <tr key={r.id + '-detail'} className="detail-row">
+                    <td colSpan={7}>
+                      <ClaimCard row={r} max={max} onCompany={(s) => onCompany(s, 'the ledger')} />
+                      <p className="small is-null" style={{ padding: '0 18px 14px' }}>
+                        Measurement basis code: <code>{r.measurement_basis}</code> ·{' '}
+                        {basis(r.measurement_basis).name} · destination code{' '}
+                        <code>{r.destination}</code> · row ref <code>{r.ref}</code>
+                      </p>
                     </td>
                   </tr>
-                  {isOpen && (
-                    <tr key={r.id + '-detail'}>
-                      <td colSpan={7} style={{ padding: 0 }}>
-                        <ClaimDetail row={r} onFilterCompany={onFilterCompany} />
-                      </td>
-                    </tr>
-                  )}
-                </>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </>
+                )}
+              </>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
-}
-
-function deltaClass(n: number | null): string {
-  if (n === null || n === undefined) return 'is-null';
-  return n > 0 ? 'is-traced' : n < 0 ? 'is-gap' : '';
 }

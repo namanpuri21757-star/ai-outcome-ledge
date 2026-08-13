@@ -1,103 +1,58 @@
-import { useMemo } from 'react';
-import { ClaimTags } from '../components/Tag';
-import { shortDate } from '../lib/format';
-import { sourceLinks } from '../lib/sourceLinks';
 import type { LedgerRow } from '../lib/types';
-
-const ORDER: Record<string, number> = {
-  disputed: 0,
-  needs_primary_source: 1,
-  secondary_only: 2,
-  verified_primary: 3,
-};
+import { sourceLinks } from '../lib/sourceLinks';
+import { shortDate, clip } from '../lib/format';
+import { VERIFICATION } from '../lib/labels';
 
 /**
- * The verification queue. Most rows deliberately carry no stored URL, because
- * a URL written from memory is worse than none: it looks verified. Each row
- * carries the exact next step instead, and a link straight to the index where
- * that step gets done.
+ * The work queue. Every row whose next verification step is known but
+ * not yet done, with the step written out and the search that starts it
+ * one click away.
  */
-export function QueueView({ rows }: { rows: LedgerRow[] }) {
-  const queue = useMemo(
-    () =>
-      rows
-        .filter((r) => r.verification_status !== 'verified_primary')
-        .sort(
-          (a, b) =>
-            (ORDER[a.verification_status] ?? 9) - (ORDER[b.verification_status] ?? 9) ||
-            (b.claimed_amount_usd ?? 0) - (a.claimed_amount_usd ?? 0),
-        ),
-    [rows],
-  );
+export function QueueView({
+  rows, onCompany,
+}: { rows: LedgerRow[]; onCompany: (slug: string, context: string) => void }) {
+  const queue = rows
+    .filter((r) => r.verification_status === 'needs_primary_source' || r.verification_status === 'disputed')
+    .sort((a, b) => (b.claimed_amount_usd ?? 0) - (a.claimed_amount_usd ?? 0));
 
-  const counts = rows.reduce<Record<string, number>>((acc, r) => {
-    acc[r.verification_status] = (acc[r.verification_status] ?? 0) + 1;
-    return acc;
-  }, {});
+  if (queue.length === 0) {
+    return (
+      <div className="empty">
+        <strong>Nothing waiting in this selection.</strong>
+        Every row here has been checked against a primary source.
+      </div>
+    );
+  }
 
   return (
     <>
-      <div className="figures">
-        <div className="figure">
-          <span className="label">Verified primary</span>
-          <span className="value is-traced">{counts.verified_primary ?? 0}</span>
-          <span className="sub">filing, administrative data or peer review</span>
-        </div>
-        <div className="figure">
-          <span className="label">Secondary only</span>
-          <span className="value">{counts.secondary_only ?? 0}</span>
-          <span className="sub">usable, not yet tied to a primary</span>
-        </div>
-        <div className="figure">
-          <span className="label">Needs a primary source</span>
-          <span className="value is-gap">{counts.needs_primary_source ?? 0}</span>
-          <span className="sub">work queue</span>
-        </div>
-        <div className="figure">
-          <span className="label">Disputed</span>
-          <span className="value is-gap">{counts.disputed ?? 0}</span>
-          <span className="sub">sources conflict; do not cite</span>
-        </div>
-      </div>
-
-      {queue.length === 0 ? (
-        <div className="empty"><strong>Everything in this selection has a primary source.</strong></div>
-      ) : (
-        <div className="table-wrap">
-          <table className="ledger">
-            <thead>
-              <tr>
-                <th>Row</th><th>Status</th><th>Next step</th><th>Go</th>
-              </tr>
-            </thead>
-            <tbody>
-              {queue.map((r) => (
-                <tr key={r.id} style={{ cursor: 'default' }}>
-                  <td className="claim-cell">
-                    <div className="headline">{r.headline}</div>
-                    <div className="meta">
-                      {r.company_name} · {shortDate(r.claim_date)} <ClaimTags row={r} />
-                    </div>
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                    {r.verification_status.replace(/_/g, ' ')}
-                  </td>
-                  <td style={{ fontFamily: 'var(--font-serif)', fontSize: 14, maxWidth: '38ch' }}>
-                    {r.verify_hint ?? '—'}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {sourceLinks(r).map((l) => (
-                      <div key={l.href}>
-                        <a href={l.href} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>{l.label} →</a>
-                      </div>
-                    ))}
-                  </td>
-                </tr>
+      <p className="note">
+        {queue.length} row{queue.length === 1 ? '' : 's'} waiting, largest claim first. Each one names
+        the exact next step, so this is a list of tasks rather than a list of doubts.
+      </p>
+      <div className="queue">
+        {queue.map((r) => (
+          <article key={r.id} className="queue-item">
+            <header>
+              <button type="button" className="linklike"
+                onClick={() => onCompany(r.company_slug, 'verification queue')}>
+                {r.company_name}
+              </button>
+              <span className="small is-null"> · {shortDate(r.claim_date)}</span>
+              <span className={'tag ' + (r.verification_status === 'disputed' ? 'alert' : 't3')}>
+                {VERIFICATION[r.verification_status].name}
+              </span>
+            </header>
+            <p className="headline">{clip(r.headline, 140)}</p>
+            {r.verify_hint && <p className="mono small">{r.verify_hint}</p>}
+            <div className="links">
+              {sourceLinks(r).map((l) => (
+                <a key={l.href} href={l.href} target="_blank" rel="noreferrer noopener">{l.label} →</a>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          </article>
+        ))}
+      </div>
     </>
   );
 }

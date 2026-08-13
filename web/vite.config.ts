@@ -6,16 +6,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        // recharts + d3 are ~two thirds of the bundle and are only needed once
-        // a row is expanded. Splitting them lets the ledger itself paint first.
-        manualChunks: {
-          charts: ['recharts'],
-          vendor: ['react', 'react-dom', '@supabase/supabase-js'],
-        },
-      },
-    },
+    // No manualChunks: recharts is reached only through the dynamic import
+    // in LazyMarginChart, so Rollup keeps it out of the initial graph on its
+    // own. Naming it here would pull it back into the static preload set.
     chunkSizeWarningLimit: 700,
   },
 });

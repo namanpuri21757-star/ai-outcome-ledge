@@ -1,4 +1,4 @@
-/** Display formatting. Kept pure and separate because a table where the
+/** Display formatting. Pure and centralised, because a table where the
  *  numbers are formatted three slightly different ways reads as unfinished. */
 
 export function usd(n: number | null | undefined, opts: { sign?: boolean } = {}): string {
@@ -35,13 +35,14 @@ export function ratioAsPct(n: number | null | undefined, digits = 1): string {
   return `${(n * 100).toFixed(digits)}%`;
 }
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const [y, m] = iso.split('-');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const mi = Number(m) - 1;
-  if (!months[mi]) return iso;
-  return `${months[mi]} ${y}`;
+  if (!MONTHS[mi]) return iso;
+  return `${MONTHS[mi]} ${y}`;
 }
 
 export function claimedValue(value: number | null, unit: string | null): string {
@@ -57,12 +58,10 @@ export function claimedValue(value: number | null, unit: string | null): string 
   }
 }
 
-export function initials(name: string): string {
-  return name
-    .replace(/[^A-Za-z0-9 ]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join('');
+/** Sentence-safe truncation on a word boundary. */
+export function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const space = cut.lastIndexOf(' ');
+  return (space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd() + '…';
 }

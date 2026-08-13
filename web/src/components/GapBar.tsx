@@ -1,10 +1,11 @@
 import { usd } from '../lib/format';
+import { COPY } from '../lib/labels';
 
 /**
- * The signature element. One horizontal bar per claim:
- *   solid green   = the portion tied out to a disclosed P&L line
- *   hatched red   = asserted but not tied out
- *   empty         = the rest of the scale, so bars are comparable to each other
+ * The signature element. One bar per claim:
+ *   solid green  the portion matched to a disclosed line item
+ *   hatched red  asserted, but not matched to one
+ *   empty        the rest of the scale, so bars compare to each other
  *
  * Repeated down a list it stops being a chart and becomes the argument.
  */
@@ -20,7 +21,7 @@ export function GapBar({
   const label =
     c === 0
       ? 'No dollar figure attached'
-      : `${usd(c)} claimed, ${usd(t)} tied to a disclosed line, ${usd(c - t)} not`;
+      : `${usd(c)} claimed · ${usd(t)} traceable to a filing line · ${usd(c - t)} not`;
 
   return (
     <div className={'gapbar' + (large ? ' gapbar-lg' : '')} role="img" aria-label={label} title={label}>
@@ -34,9 +35,9 @@ export function GapBar({
 export function GapLegend() {
   return (
     <div className="gap-legend">
-      <span><i className="swatch traced" /> Tied to a disclosed line</span>
-      <span><i className="swatch gap" /> Asserted, not tied out</span>
-      <span><i className="swatch transfer" /> Absorbed by a counterparty</span>
+      <span><i className="swatch traced" /> {COPY.traced}</span>
+      <span title={COPY.untracedMeaning}><i className="swatch gap" /> {COPY.untraced}</span>
+      <span><i className="swatch transfer" /> {COPY.absorbed}</span>
     </div>
   );
 }

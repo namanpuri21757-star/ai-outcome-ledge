@@ -2,15 +2,17 @@ import type { Company, Env, ObservationRow, RunError, RunResult } from './types'
 import { Db } from './db';
 import { SEC_TICKER_MAP_URL, companyFactsUrl, extractSeries, parseTickerMap, secFetch } from './sec';
 import { fetchPrices } from './stooq';
-import { computeOutcome, computePriceOutcome, type Point } from './outcomes';
+import {
+  computeOutcome, computePriceOutcome, toRow, REASON_TEXT,
+  type OutcomeReason, type Point,
+} from './outcomes';
 
 const OBS_CONFLICT = 'company_id,series_key,observed_at,source';
+const OUTCOME_SERIES = ['operating_margin_q', 'price_close', 'opex_q', 'revenue_q'];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Every run writes a row to fetch_runs, successful or not. A pipeline that
- *  fails silently is worse than one that fails loudly, because you keep
- *  reading a chart that stopped updating three weeks ago. */
+/** Every run writes a row to fetch_runs, successful or not. */
 async function recordRun(db: Db, trigger: string, job: string, fn: () => Promise<RunResult>) {
   const run = await db.insertReturning<{ id: number }>('fetch_runs', {
     trigger,
@@ -51,7 +53,6 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
     'select=id,slug,name,ticker,cik,stooq_symbol,is_public&is_public=eq.true',
   );
 
-  // Resolve any missing CIKs once, from the SEC's own mapping file.
   const needCik = companies.filter((c) => !c.cik && c.ticker);
   if (needCik.length) {
     try {
@@ -61,12 +62,11 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
         if (cik) {
           await db.patch('companies', `id=eq.${c.id}`, { cik });
           c.cik = cik;
-        } else {
-          errors.push({
-            scope: c.slug,
-            message: `Ticker ${c.ticker} is not in the SEC mapping file. Probably a non-US listing; fundamentals will be skipped.`,
-          });
         }
+        // A non-US listing has no CIK and never will. That is a known
+        // fact about the company, not a fault in the run, so it is not
+        // reported as a warning — it was three of these repeating every
+        // run that made a healthy pipeline look broken.
       }
     } catch (err: any) {
       errors.push({ scope: 'cik-map', message: String(err?.message ?? err) });
@@ -74,6 +74,7 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
   }
 
   const withCik = companies.filter((c) => c.cik);
+  const noCik = companies.filter((c) => !c.cik);
 
   for (const c of withCik) {
     try {
@@ -96,7 +97,11 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
       }
       if (rows.length) rowsWritten += await db.upsert('observations', rows, OBS_CONFLICT);
       if (!series.length) {
-        errors.push({ scope: c.slug, message: 'No usable us-gaap concepts found in companyfacts.' });
+        errors.push({
+          scope: c.slug,
+          message:
+            'Files with the SEC but reports no us-gaap concepts. Usually a foreign private issuer reporting under IFRS; no margin series is possible.',
+        });
       }
     } catch (err: any) {
       errors.push({ scope: c.slug, message: String(err?.message ?? err) });
@@ -110,7 +115,11 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
     rowsWritten,
     errors,
     ok: errors.length === 0,
-    notes: `${withCik.length} filers with a CIK; ${companies.length - withCik.length} public companies skipped for lack of one.`,
+    notes:
+      `${withCik.length} SEC filers processed. ` +
+      (noCik.length
+        ? `${noCik.length} listed outside the SEC (${noCik.map((c) => c.slug).join(', ')}); no fundamentals are expected for them.`
+        : ''),
   };
 }
 
@@ -143,24 +152,25 @@ export async function runPrices(env: Env): Promise<RunResult> {
     } catch (err: any) {
       errors.push({ scope: c.slug, message: String(err?.message ?? err) });
     }
-    await sleep(400); // Stooq is a free courtesy endpoint; do not hammer it
+    await sleep(400); // a free courtesy endpoint; do not hammer it
   }
 
-  return {
-    job: 'prices',
-    companiesAttempted: companies.length,
-    rowsWritten,
-    errors,
-    ok: errors.length === 0,
-  };
+  return { job: 'prices', companiesAttempted: companies.length, rowsWritten, errors, ok: errors.length === 0 };
 }
 
 // ---------------------------------------------------------------------------
-// Job 3: derive claim outcomes from whatever observations now exist
+// Job 3: derive claim outcomes
+//
+// Rewritten so that a run producing nothing explains itself. The old
+// version pushed a row only when a baseline existed and returned no
+// trace otherwise, which is how it came to report "0 rows, no errors"
+// while every margin figure in the interface sat blank.
 // ---------------------------------------------------------------------------
 export async function runOutcomes(env: Env): Promise<RunResult> {
   const db = new Db(env);
   const errors: RunError[] = [];
+  const tally: Record<string, number> = {};
+  const count = (r: OutcomeReason) => { tally[r] = (tally[r] ?? 0) + 1; };
 
   const claims = await db.select<{ id: string; company_id: string; claim_date: string }>(
     'claims',
@@ -174,32 +184,47 @@ export async function runOutcomes(env: Env): Promise<RunResult> {
     byCompany.set(c.company_id, list);
   }
 
-  const rows: any[] = [];
+  const rows: Array<Record<string, unknown>> = [];
+  let companiesWithSeries = 0;
+  let observationsRead = 0;
 
   for (const [companyId, list] of byCompany) {
     try {
-      const obs = await db.select<{ series_key: string; observed_at: string; value: string }>(
-        'observations',
-        `select=series_key,observed_at,value&company_id=eq.${companyId}&series_key=in.(operating_margin_q,price_close,opex_q,revenue_q)&order=observed_at.asc`,
-      );
-      if (!obs.length) continue;
-
+      // One query per series rather than one filtered by `in`. Each
+      // comes back small enough to be obviously complete, and a failure
+      // in one series no longer costs the others.
       const bySeries = new Map<string, Point[]>();
-      for (const o of obs) {
-        const list2 = bySeries.get(o.series_key) ?? [];
-        list2.push({ date: o.observed_at, value: Number(o.value) });
-        bySeries.set(o.series_key, list2);
+      for (const key of OUTCOME_SERIES) {
+        const obs = await db.select<{ observed_at: string; value: string | number }>(
+          'observations',
+          `select=observed_at,value&company_id=eq.${companyId}&series_key=eq.${key}&order=observed_at.asc`,
+        );
+        observationsRead += obs.length;
+        if (obs.length) {
+          bySeries.set(key, obs.map((o) => ({ date: o.observed_at, value: Number(o.value) })));
+        }
       }
 
+      if (bySeries.size === 0) {
+        for (const _ of list) count('no_series');
+        continue;
+      }
+      companiesWithSeries += 1;
+
       for (const claim of list) {
+        let wroteAny = false;
         for (const [seriesKey, points] of bySeries) {
           const outcome =
             seriesKey === 'price_close'
               ? computePriceOutcome(points, claim.claim_date)
               : computeOutcome(points, claim.claim_date, { asBps: seriesKey.endsWith('margin_q') });
+
           if (outcome.baseline_at === null) continue;
-          rows.push({ claim_id: claim.id, series_key: seriesKey, ...outcome, computed_at: new Date().toISOString() });
+          rows.push(toRow(claim.id, seriesKey, outcome));
+          wroteAny = true;
+          if (seriesKey === 'operating_margin_q') count(outcome.reason);
         }
+        if (!wroteAny) count('no_baseline_before_claim');
       }
     } catch (err: any) {
       errors.push({ scope: companyId, message: String(err?.message ?? err) });
@@ -209,13 +234,35 @@ export async function runOutcomes(env: Env): Promise<RunResult> {
   let rowsWritten = 0;
   if (rows.length) rowsWritten = await db.upsert('claim_outcomes', rows, 'claim_id,series_key');
 
+  // The summary is the point. A run that writes nothing now says which
+  // branch it took and how often, so the next question is answerable
+  // without adding logging first.
+  const breakdown = Object.entries(tally)
+    .map(([reason, n]) => `${n} ${REASON_TEXT[reason as OutcomeReason] ?? reason}`)
+    .join('; ');
+
+  const notes =
+    `${claims.length} published claims across ${byCompany.size} companies. ` +
+    `${companiesWithSeries} companies had an observation series; ${observationsRead.toLocaleString()} observations read. ` +
+    `Margin outcomes: ${breakdown || 'none attempted'}.`;
+
+  if (rowsWritten === 0) {
+    errors.push({
+      scope: 'outcomes',
+      message:
+        observationsRead === 0
+          ? 'No observations were read at all. Run the fundamentals job first; until it succeeds there is nothing to measure claims against.'
+          : `Observations exist (${observationsRead.toLocaleString()} read) but no claim could be matched to one. ${notes}`,
+    });
+  }
+
   return {
     job: 'outcomes',
     companiesAttempted: byCompany.size,
     rowsWritten,
     errors,
-    ok: errors.length === 0,
-    notes: `${claims.length} published claims examined.`,
+    ok: errors.length === 0 && rowsWritten > 0,
+    notes,
   };
 }
 
@@ -235,12 +282,7 @@ function missingConfig(env: Env): string[] {
 }
 
 export default {
-  /**
-   * Two schedules. Prices daily after the US close; fundamentals and derived
-   * outcomes once a day an hour later, so outcomes always run against fresh
-   * observations rather than yesterday's.
-   */
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
     const missing = missingConfig(env);
     if (missing.length) throw new Error(`Worker is missing secrets: ${missing.join(', ')}`);
 

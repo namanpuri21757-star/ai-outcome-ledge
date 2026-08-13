@@ -1,10 +1,10 @@
 import type { LedgerRow } from './types';
 
 /**
- * Most rows deliberately have no stored source URL: a URL typed from memory
- * is worse than no URL, because it looks verified. Instead we build a search
- * that lands you on the right index, so the verification queue is one click
- * from actually being worked rather than being a list of chores.
+ * Most rows deliberately have no stored source URL: a URL written from
+ * memory is worse than none, because it looks verified. Instead we build
+ * a search that lands on the right index, so verification is one click
+ * from being done rather than being a chore on a list.
  */
 export interface SourceLink {
   label: string;
@@ -12,12 +12,12 @@ export interface SourceLink {
 }
 
 export function edgarFullTextSearch(query: string, entity?: string | null): string {
-  // Built with encodeURIComponent rather than URLSearchParams on purpose:
-  // URLSearchParams encodes a space as "+", and EDGAR's hash route does not
-  // decode "+" back to a space, so the phrase search silently returns nothing.
-  const parts = [`q=${encodeURIComponent(`"${query}"`)}`];
-  if (entity) parts.push(`entityName=${encodeURIComponent(entity)}`);
-  return `https://www.sec.gov/edgar/search/#/${parts.join('&')}`;
+  const params = new URLSearchParams({ q: `"${query}"` });
+  if (entity) params.set('entityName', entity);
+  // Spaces must be %20 rather than +: this is a hash fragment, and EDGAR
+  // does not decode + inside one. Getting this wrong makes every link
+  // silently return nothing.
+  return `https://www.sec.gov/edgar/search/#/${params.toString().replace(/\+/g, '%20')}`;
 }
 
 export function edgarCompany(ticker: string): string {
@@ -30,10 +30,9 @@ export function scholarSearch(query: string): string {
   return `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`;
 }
 
-/** Ordered best-first. The stored URL always wins when one exists. */
+/** Ordered best-first. A stored URL always wins when one exists. */
 export function sourceLinks(row: LedgerRow): SourceLink[] {
   const out: SourceLink[] = [];
-
   if (row.source_url) out.push({ label: 'Source', href: row.source_url });
 
   if (row.source_type === 'peer_reviewed') {
@@ -45,17 +44,13 @@ export function sourceLinks(row: LedgerRow): SourceLink[] {
 
   if (row.company_is_public && row.company_ticker) {
     out.push({ label: 'EDGAR filings', href: edgarCompany(row.company_ticker) });
-    out.push({
-      label: 'EDGAR full text',
-      href: edgarFullTextSearch(searchPhrase(row), row.company_name),
-    });
+    out.push({ label: 'EDGAR full text', href: edgarFullTextSearch(searchPhrase(row), row.company_name) });
   }
-
   return out;
 }
 
-/** A short, distinctive phrase is what full-text search actually wants; a
- *  whole headline returns nothing. */
+/** Full-text search wants a short distinctive phrase; a whole headline
+ *  returns nothing. */
 export function searchPhrase(row: LedgerRow): string {
   const stop = new Set([
     'the','a','an','of','and','to','in','on','for','with','at','by','from','is','are','was','were',

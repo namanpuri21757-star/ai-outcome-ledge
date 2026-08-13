@@ -2,22 +2,18 @@ import type { XbrlFact, QuarterFact } from './types';
 
 /**
  * Turning SEC XBRL duration facts into a clean quarterly series is the one
- * genuinely hard piece of this pipeline, and it is where a naive
- * implementation silently produces wrong numbers rather than errors.
+ * genuinely hard piece of this pipeline, and where a naive implementation
+ * silently produces wrong numbers rather than errors.
  *
- * Three specific traps:
+ *  1. Amended filings restate the same period. Latest `filed` wins, and a
+ *     10-K beats a 10-Q for the same window because the annual figure is
+ *     the audited one.
+ *  2. Many filers tag Q2 as a 181-day period and Q3 as 273 days rather
+ *     than the discrete quarter. Reading those as quarters roughly doubles
+ *     and triples the values.
+ *  3. Q4 is never filed. It exists only as FY minus the first three.
  *
- *  1. Amended filings. The same period appears more than once with different
- *     values. The later `filed` date wins, and a 10-K beats a 10-Q for the
- *     same window because the annual figure is the audited one.
- *
- *  2. Year-to-date tagging. Many filers tag Q2 as a 181-day period and Q3 as
- *     a 273-day period rather than tagging the discrete quarter. Reading those
- *     as quarters roughly doubles and triples the values.
- *
- *  3. Q4 is never filed. It only exists as FY minus the first three quarters.
- *
- * Everything here is pure. No fetch, no clock, no environment.
+ * Everything here is pure: no fetch, no clock, no environment.
  */
 
 const DAY_MS = 86_400_000;
@@ -31,7 +27,6 @@ export function daysBetween(startIso: string, endIso: string): number {
 
 export type Bucket = 'Q' | 'H' | 'T' | 'FY' | 'other';
 
-/** Classify a duration by length, with the tolerances the SEC itself uses for frames. */
 export function bucketOf(days: number): Bucket {
   if (!Number.isFinite(days)) return 'other';
   if (days >= 80 && days <= 100) return 'Q';
@@ -41,9 +36,6 @@ export function bucketOf(days: number): Bucket {
   return 'other';
 }
 
-/** Calendar-quarter label from a period end date. Filers with odd fiscal years
- *  still land in the calendar quarter their period ends in, which is what makes
- *  cross-company comparison possible at all. */
 export function fiscalPeriodLabel(endIso: string): string {
   const [y, m] = endIso.split('-').map(Number);
   const q = Math.min(4, Math.floor((m - 1) / 3) + 1);
@@ -67,10 +59,6 @@ function formRank(form?: string): number {
   return 0;
 }
 
-/**
- * Collapse duplicate (start,end) pairs. Latest `filed` wins; when two filings
- * share a date, the annual form wins over the quarterly one.
- */
 export function dedupeByPeriod(facts: XbrlFact[]): Keyed[] {
   const best = new Map<string, Keyed>();
   for (const f of facts) {
@@ -78,19 +66,12 @@ export function dedupeByPeriod(facts: XbrlFact[]): Keyed[] {
     if (typeof f.val !== 'number' || !Number.isFinite(f.val)) continue;
     const key = `${f.start}|${f.end}`;
     const cand: Keyed = {
-      start: f.start,
-      end: f.end,
-      val: f.val,
+      start: f.start, end: f.end, val: f.val,
       bucket: bucketOf(daysBetween(f.start, f.end)),
-      accn: f.accn,
-      filed: f.filed,
-      form: f.form,
+      accn: f.accn, filed: f.filed, form: f.form,
     };
     const cur = best.get(key);
-    if (!cur) {
-      best.set(key, cand);
-      continue;
-    }
+    if (!cur) { best.set(key, cand); continue; }
     const filedCmp = (cand.filed ?? '').localeCompare(cur.filed ?? '');
     if (filedCmp > 0 || (filedCmp === 0 && formRank(cand.form) > formRank(cur.form))) {
       best.set(key, cand);
@@ -103,28 +84,18 @@ function contains(outer: Keyed, inner: { start: string; end: string }): boolean 
   return inner.start >= outer.start && inner.end <= outer.end;
 }
 
-/**
- * Derive quarters that were never tagged discretely, by subtracting known
- * quarters from a longer cumulative period. Runs to a fixed point because
- * deriving Q2 from H1 can then unlock Q4 from FY.
- */
 export function deriveQuarters(rows: Keyed[]): QuarterFact[] {
   const quarters = new Map<string, QuarterFact>();
 
   for (const r of rows) {
     if (r.bucket !== 'Q') continue;
     quarters.set(r.end, {
-      end: r.end,
-      start: r.start,
-      val: r.val,
-      origin: 'reported',
-      accn: r.accn,
-      fiscalPeriod: fiscalPeriodLabel(r.end),
+      end: r.end, start: r.start, val: r.val, origin: 'reported',
+      accn: r.accn, fiscalPeriod: fiscalPeriodLabel(r.end),
     });
   }
 
   const cumulative = rows.filter((r) => r.bucket === 'H' || r.bucket === 'T' || r.bucket === 'FY');
-  // Shorter windows first: solving H1 before FY means FY has more to subtract.
   cumulative.sort((a, b) => daysBetween(a.start, a.end) - daysBetween(b.start, b.end));
 
   const expected: Record<string, number> = { H: 2, T: 3, FY: 4 };
@@ -137,7 +108,6 @@ export function deriveQuarters(rows: Keyed[]): QuarterFact[] {
       const need = expected[c.bucket];
       if (inside.length !== need - 1) continue;
 
-      // The missing quarter must be a contiguous gap at one end of the window.
       inside.sort((a, b) => a.start.localeCompare(b.start));
       const covered = inside.reduce((s, q) => s + q.val, 0);
       const missingVal = c.val - covered;
@@ -154,21 +124,15 @@ export function deriveQuarters(rows: Keyed[]): QuarterFact[] {
         start = c.start;
         end = addDays(first.start, -1);
       } else {
-        // gap sits in the middle; ambiguous, refuse rather than guess
-        continue;
+        continue; // gap in the middle: ambiguous, refuse rather than guess
       }
 
-      const gapDays = daysBetween(start, end);
-      if (bucketOf(gapDays) !== 'Q') continue;
+      if (bucketOf(daysBetween(start, end)) !== 'Q') continue;
       if (quarters.has(end)) continue;
 
       quarters.set(end, {
-        end,
-        start,
-        val: round2(missingVal),
-        origin: 'derived',
-        accn: c.accn,
-        fiscalPeriod: fiscalPeriodLabel(end),
+        end, start, val: round2(missingVal), origin: 'derived',
+        accn: c.accn, fiscalPeriod: fiscalPeriodLabel(end),
       });
       progress = true;
     }
@@ -188,16 +152,14 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** The whole pipeline for one concept: dedupe, then derive. */
 export function toQuarterlySeries(facts: XbrlFact[]): QuarterFact[] {
   return deriveQuarters(dedupeByPeriod(facts));
 }
 
 /**
- * Operating margin, joined on period end. Only emits a point where both
- * revenue and operating income exist for the identical period, and where
- * revenue is positive. A margin computed across mismatched periods is worse
- * than no margin at all, because it looks plausible.
+ * Operating margin, joined strictly on period end. A margin computed
+ * across mismatched periods is worse than no margin, because it looks
+ * plausible.
  */
 export function computeMarginSeries(
   revenue: QuarterFact[],

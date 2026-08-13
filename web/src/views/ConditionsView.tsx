@@ -1,82 +1,104 @@
-import { useMemo } from 'react';
-import { conditionCells } from '../lib/filters';
-import { bps } from '../lib/format';
 import type { LedgerRow } from '../lib/types';
+import { conditionCells } from '../lib/filters';
+import { CONDITION_LIST } from '../lib/labels';
+import { bps, clip } from '../lib/format';
+import { ConditionFlags } from '../components/ConditionFlags';
 
 /**
- * The three conditions, as a 2x2x2, populated with live data.
+ * The hypothesis, tested rather than restated: meeting two of three
+ * produces operational improvement and no profit effect; meeting all
+ * three is what the rare high performers have.
  *
- *   1. The billing unit survives the automation
- *   2. There is a demand sink for the freed capacity
- *   3. There is permission to act on it
- *
- * The claim in the source research is that meeting two of three produces
- * operational improvement and no EBIT effect, and that meeting all three is
- * what the roughly 6% of high performers have. This is where that claim gets
- * tested rather than repeated: the mean margin movement per cell comes from
- * SEC filings, not from coding.
+ * The three conditions used to appear as three bare words. Each one now
+ * carries its question and its meaning on the page itself, because a
+ * reader who has to ask what "demand sink" means has been failed by the
+ * label rather than by their own attention.
  */
 export function ConditionsView({
-  rows, onPick,
-}: { rows: LedgerRow[]; onPick: (slug: string) => void }) {
-  const cells = useMemo(() => conditionCells(rows).filter((c) => c.rows.length > 0), [rows]);
+  rows, onCompany,
+}: { rows: LedgerRow[]; onCompany: (slug: string, context: string) => void }) {
+  const cells = conditionCells(rows).filter((c) => c.rows.length > 0);
   const uncoded = rows.filter(
-    (r) => r.cond_billing_unit_survives === null || r.cond_demand_sink === null || r.cond_permission_to_act === null,
+    (r) =>
+      r.cond_billing_unit_survives === null ||
+      r.cond_demand_sink === null ||
+      r.cond_permission_to_act === null,
   ).length;
-
-  if (cells.length === 0) {
-    return (
-      <div className="empty">
-        <strong>No rows in this selection have all three conditions coded.</strong>
-        Clear the filters, or code the conditions on more rows.
-      </div>
-    );
-  }
 
   return (
     <>
-      <div className="cond-grid">
-        {cells.map((c) => {
-          const key = `${c.billing}-${c.sink}-${c.permission}`;
-          const companies = [...new Set(c.rows.map((r) => r.company_slug))];
-          return (
-            <div className={`cond-cell pass-${c.passes}`} key={key}>
-              <div className="flags">
-                <span className={'flagpill ' + (c.billing ? 'on' : 'off')}>billing unit</span>
-                <span className={'flagpill ' + (c.sink ? 'on' : 'off')}>demand sink</span>
-                <span className={'flagpill ' + (c.permission ? 'on' : 'off')}>permission</span>
-              </div>
-              <span className="n">{c.rows.length}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                {' '}rows · {companies.length} companies · {c.passes}/3 conditions
-              </span>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, marginTop: 4 }}>
-                mean margin +1y:{' '}
-                <strong style={{ color: c.meanMarginDelta4qBps === null ? 'var(--ink-3)'
-                  : c.meanMarginDelta4qBps > 0 ? 'var(--traced)' : 'var(--gap)' }}>
-                  {bps(c.meanMarginDelta4qBps)}
-                </strong>
-              </div>
-              <ul>
-                {c.rows.slice(0, 8).map((r) => (
-                  <li key={r.id} onClick={() => onPick(r.company_slug)}>
-                    <strong>{r.company_name}</strong> — {r.headline.slice(0, 58)}
-                    {r.headline.length > 58 ? '…' : ''}
-                  </li>
-                ))}
-                {c.rows.length > 8 && <li style={{ color: 'var(--ink-3)' }}>+{c.rows.length - 8} more</li>}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
+      <section className="cond-key">
+        {CONDITION_LIST.map((c) => (
+          <div key={c.key} className="cond-key-item">
+            <h3>{c.name}</h3>
+            <p className="question">{c.question}</p>
+            <p className="small"><strong>Met:</strong> {c.passes}</p>
+            <p className="small"><strong>Not met:</strong> {c.fails}</p>
+          </div>
+        ))}
+      </section>
 
-      <p className="note" style={{ marginTop: 18 }}>
-        Cells outlined in green pass all three conditions; the one outlined in red passes none.
-        {uncoded > 0 && ` ${uncoded} rows in this selection are not yet coded on all three and are excluded.`}
-        {' '}The mean margin figure is only as good as the number of public filers in each cell — treat a
-        cell with two companies as a prompt to look, not as a result.
-      </p>
+      {cells.length === 0 ? (
+        <div className="empty">
+          <strong>No rows in this selection have all three conditions coded.</strong>
+          Clear the filters, or code the conditions on more rows.
+        </div>
+      ) : (
+        <div className="cond-grid">
+          {cells.map((c) => {
+            const key = `${c.billing}-${c.sink}-${c.permission}`;
+            return (
+              <div className={`cond-cell pass-${c.passes}`} key={key}>
+                <ConditionFlags state={{ billing: c.billing, sink: c.sink, permission: c.permission }} />
+
+                <div className="cond-count">
+                  <span className="n">{c.rows.length}</span>
+                  <span className="small">
+                    row{c.rows.length === 1 ? '' : 's'} · {c.companies.length} compan
+                    {c.companies.length === 1 ? 'y' : 'ies'} · {c.passes} of 3 conditions met
+                  </span>
+                </div>
+
+                <div className="cond-margin">
+                  Margin a year later:{' '}
+                  <strong className={c.meanMarginDelta4qBps === null ? 'is-null'
+                    : c.meanMarginDelta4qBps > 0 ? 'is-traced' : 'is-gap'}>
+                    {bps(c.meanMarginDelta4qBps)}
+                  </strong>
+                  <span className="small">
+                    {c.measured === 0
+                      ? ' — not measured on any row in this cell yet'
+                      : ` — averaged over ${c.measured} of ${c.rows.length} rows`}
+                  </span>
+                </div>
+
+                <ul>
+                  {c.rows.slice(0, 8).map((r) => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        className="linklike"
+                        onClick={() => onCompany(r.company_slug, `${c.passes} of 3 conditions met`)}
+                      >
+                        <strong>{r.company_name}</strong> — {clip(r.headline, 62)}
+                      </button>
+                    </li>
+                  ))}
+                  {c.rows.length > 8 && <li className="small is-null">and {c.rows.length - 8} more</li>}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {uncoded > 0 && (
+        <p className="note small">
+          {uncoded} row{uncoded === 1 ? ' is' : 's are'} missing at least one condition and so
+          appear{uncoded === 1 ? 's' : ''} in none of the cells above. Uncoded is a real state and is
+          not silently treated as "not met".
+        </p>
+      )}
     </>
   );
 }

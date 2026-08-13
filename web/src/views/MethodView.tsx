@@ -1,5 +1,10 @@
-/** The coding rules, in the app rather than only in a file, because a
- *  taxonomy nobody can see gets applied inconsistently within a month. */
+import { BASES, CONDITION_LIST, DESTINATION_ORDER, KINDS, TIERS, destination, COPY } from '../lib/labels';
+import type { MeasurementBasis, ClaimKind } from '../lib/types';
+
+/**
+ * The coding rules. Written in the same words the interface uses, so a
+ * reader can move between this page and a row without translating.
+ */
 export function MethodView() {
   return (
     <div className="doc">
@@ -12,56 +17,104 @@ export function MethodView() {
         share price — pulled from SEC XBRL and rebuilt on every run.
       </p>
 
-      <h3>Measurement basis</h3>
+      <h3>What the number is</h3>
       <p>The single field that decides whether a claim means anything.</p>
-      <ul>
-        <li><code>gross_capacity</code> — hours or heads freed, valued at loaded cost. Not a cost line. The most common and most consequential category.</li>
-        <li><code>net_pl</code> — a disclosed line item moved, or an audited saving.</li>
-        <li><code>unit_economics</code> — a price or margin per unit of output.</li>
-        <li><code>headcount</code>, <code>time</code>, <code>quality</code>, <code>activity</code> — real measures that are not money.</li>
-        <li><code>unverified</code> — the source does not say what it measured. Not a criticism, a status.</li>
-      </ul>
+      <dl className="doc-list">
+        {(Object.keys(BASES) as MeasurementBasis[]).map((k) => (
+          <div key={k}>
+            <dt>{BASES[k].name}</dt>
+            <dd>{BASES[k].meaning}</dd>
+          </div>
+        ))}
+      </dl>
 
-      <h3>Destination</h3>
-      <p>Where the gain landed. Only the fifth is P&amp;L margin.</p>
-      <ul>
-        <li><strong>1 Worker slack</strong> — absorbed; nothing changes financially.</li>
-        <li><strong>2 Quality</strong> — converted to quality or wellbeing; real gain, no financial trace.</li>
-        <li><strong>3 Counterparty</strong> — transferred off a supplier's revenue line. A transfer, not a productivity gain.</li>
-        <li><strong>4 Price</strong> — passed to the customer. Captured by the buyer of AI, not the seller.</li>
-        <li><strong>5 Margin</strong> — retained. Requires all three conditions at once.</li>
-      </ul>
-
-      <h3>Reconciliation</h3>
+      <h3>Where the gain landed</h3>
       <p>
-        <code>traceable_to_pl_usd</code> defaults to zero and only moves when a named line item can be
-        pointed at. That is why almost every bar is mostly hatched. The hatching is not an accusation
-        that a claim is false — several of them are audited and true. It marks the distance between a
-        number being real and a number being locatable in a set of financial statements.
+        Five destinations, ordered by how far the gain ended up from profit. Only the last one is
+        profit. The ordering is real information, so the interface shows it as position on a ladder
+        rather than as a number printed in front of a word — a leading "5" reads as a quantity, and
+        it is a rank.
       </p>
-
-      <h3>Evidence tier and epistemic tag</h3>
-      <p>
-        Tier 1 is a filing, administrative dataset or peer-reviewed paper. Tier 2 is vendor- or
-        self-originated. Tier 3 is press. Separately, each row is tagged fact, strong, inference,
-        speculation or unknown. A tier-1 source can still carry an inference, and a tier-3 source can
-        still report a fact; conflating the two is how vendor ROI figures end up quoted as measurements.
-      </p>
-
-      <h3>Rules the corpus follows</h3>
-      <ul>
-        <li>Ranges are never averaged. A source that says "$2–10M annually" keeps its range; collapsing it to $6M invents precision the source does not have.</li>
-        <li>A row that cannot be computed stays in the ledger flagged as uncomputable, rather than being deleted. Deleting it is how it quietly re-enters an argument later.</li>
-        <li>Conflict of interest is recorded as a fact about the source, not as a reason to exclude it.</li>
-        <li>Counter-evidence lives in the same table as the claims it contradicts, keyed to the same company.</li>
-        <li>No source URL is stored unless it was confirmed. Rows without one carry the exact next step instead.</li>
-      </ul>
+      <dl className="doc-list">
+        {DESTINATION_ORDER.filter((r) => r > 0).map((r) => (
+          <div key={r}>
+            <dt>
+              {destination(r).name} <span className="small is-null">step {r} of 5</span>
+            </dt>
+            <dd>{destination(r).meaning}</dd>
+          </div>
+        ))}
+      </dl>
 
       <h3>The three conditions</h3>
       <p>
-        A gain reaches margin only where the billing unit survives the automation, there is a demand
-        sink for the freed capacity, and there is permission to act on it. The Conditions view is
-        where that hypothesis meets live filing data rather than being restated.
+        The claim under test: meeting two of these three produces measurable operational improvement
+        and no effect on profit. Meeting all three is what the rare high performers have.
+      </p>
+      <dl className="doc-list">
+        {CONDITION_LIST.map((c) => (
+          <div key={c.key}>
+            <dt>{c.name}</dt>
+            <dd>
+              {c.question} <strong>Met:</strong> {c.passes} <strong>Not met:</strong> {c.fails}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <h3>Traceable, and not traceable</h3>
+      <p>
+        A claim's <em>traceable</em> amount starts at zero and only moves when a named line item in a
+        financial statement can be pointed at. That is why almost every reconciliation bar is mostly
+        hatched.
+      </p>
+      <p>
+        <strong>{COPY.untraced} does not mean the claim is false.</strong> {COPY.untracedMeaning}
+      </p>
+
+      <h3>Kinds of row</h3>
+      <p>
+        Not every row asserts that AI produced a gain. A market-capitalisation figure, an acquisition
+        price, and a $60M savings claim are different objects, and summing them would make the
+        headline number meaningless. Only gain claims enter the money totals.
+      </p>
+      <dl className="doc-list">
+        {(Object.keys(KINDS) as ClaimKind[]).map((k) => (
+          <div key={k}>
+            <dt>{KINDS[k].name}</dt>
+            <dd>{KINDS[k].meaning}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <h3>How much to trust a row</h3>
+      <dl className="doc-list">
+        {[1, 2, 3].map((t) => (
+          <div key={t}>
+            <dt>{t === 1 ? 'Primary' : t === 2 ? 'Self-reported' : 'Press'}</dt>
+            <dd>{TIERS[t]}</dd>
+          </div>
+        ))}
+      </dl>
+      <p>
+        A source that sells the thing its number validates is marked <em>sells the thing</em>. It is
+        a disclosure, not a dismissal: several of the best-documented deployments in the ledger come
+        from vendors.
+      </p>
+
+      <h3>Where a source link is missing</h3>
+      <p>
+        Most rows deliberately carry no stored URL. A link written from memory is worse than none,
+        because it looks verified. Those rows carry the exact next step to check them instead, and
+        the app turns it into a one-click EDGAR or Scholar search.
+      </p>
+
+      <h3>What is generated, and what is typed</h3>
+      <p>
+        Every sentence on the findings page and every company verdict is assembled from the rows at
+        render time. None of it is typed prose about the data, so recoding a row or a fresh collector
+        run changes the answer rather than leaving a stale paragraph behind. When a query returns
+        nothing, the page says so rather than falling back to copy describing data that is not there.
       </p>
     </div>
   );

@@ -10,7 +10,12 @@ export type MeasurementBasis =
 
 export type EpistemicTag = 'fact' | 'strong' | 'inference' | 'speculation' | 'unknown';
 
-export type ClaimKind = 'gain_claim' | 'counter_evidence' | 'context' | 'pricing' | 'research_finding';
+export type ClaimKind =
+  | 'gain_claim'
+  | 'counter_evidence'
+  | 'context'
+  | 'pricing'
+  | 'research_finding';
 
 export type VerificationStatus =
   | 'verified_primary'
@@ -18,6 +23,7 @@ export type VerificationStatus =
   | 'needs_primary_source'
   | 'disputed';
 
+/** One row of v_ledger. Column names are the view's, verbatim. */
 export interface LedgerRow {
   id: string;
   ref: string;
@@ -91,32 +97,3 @@ export interface FetchRun {
   errors: Array<{ scope: string; message: string }>;
   notes: string | null;
 }
-
-/** The five destinations, in the order they appear in the source research. */
-export const DESTINATIONS: Record<number, { short: string; long: string }> = {
-  0: { short: 'Uncoded', long: 'Not yet coded, or the destination does not apply' },
-  1: { short: 'Worker slack', long: 'Absorbed as slack. Nothing changes financially.' },
-  2: { short: 'Quality', long: 'Converted to quality or wellbeing. Real gain, no financial trace.' },
-  3: { short: 'Counterparty', long: 'Transferred off a supplier revenue line. A transfer, not a productivity gain.' },
-  4: { short: 'Price', long: 'Passed to the customer through price. Captured by the buyer of AI, not the seller.' },
-  5: { short: 'Margin', long: 'Retained as margin. Requires all three conditions.' },
-};
-
-export const BASIS_LABEL: Record<MeasurementBasis, string> = {
-  gross_capacity: 'Gross capacity',
-  net_pl: 'Net P&L',
-  unit_economics: 'Unit economics',
-  headcount: 'Headcount',
-  time: 'Time',
-  quality: 'Quality',
-  activity: 'Activity',
-  unverified: 'Undefined',
-};
-
-export const KIND_LABEL: Record<ClaimKind, string> = {
-  gain_claim: 'Gain claim',
-  counter_evidence: 'Counter-evidence',
-  context: 'Context',
-  pricing: 'Pricing',
-  research_finding: 'Research',
-};
