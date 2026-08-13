@@ -3,7 +3,7 @@ import { GapBar, GapLegend } from '../components/GapBar';
 import { shortDate, usd } from '../lib/format';
 import { totals } from '../lib/filters';
 import type { LedgerRow } from '../lib/types';
-import { DESTINATIONS } from '../lib/types';
+import { DESTINATIONS } from '../lib/labels';
 
 /**
  * Every dollar claim in the current filter, largest first, drawn on one
@@ -61,7 +61,7 @@ export function ReconciliationView({
             <div className="recon-row" key={r.id} onClick={() => onSelect(r.company_slug)}>
               <div className="who">
                 {r.company_name}
-                <small>{shortDate(r.claim_date)} · {DESTINATIONS[r.destination].short}</small>
+                <small>{shortDate(r.claim_date)} · {DESTINATIONS[r.destination].name}</small>
               </div>
               <div className="bar-cell">
                 <GapBar claimed={r.claimed_amount_usd} traced={r.traceable_to_pl_usd} max={max} large />
@@ -78,3 +78,5 @@ export function ReconciliationView({
     </>
   );
 }
+
+

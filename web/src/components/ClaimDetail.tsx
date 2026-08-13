@@ -5,7 +5,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { bps, pct, ratioAsPct, shortDate, usd } from '../lib/format';
 import { sourceLinks } from '../lib/sourceLinks';
-import { DESTINATIONS, type LedgerRow } from '../lib/types';
+import { DESTINATIONS } from '../lib/labels';
+import type { LedgerRow } from '../lib/types';
 import { GapBar } from './GapBar';
 
 /** The expanded row. Everything the coding says, plus the machine-maintained
@@ -28,8 +29,8 @@ export function ClaimDetail({ row, onFilterCompany }: { row: LedgerRow; onFilter
           </div>
 
           <div className="field">
-            <h4>Where it landed — {DESTINATIONS[row.destination].short}</h4>
-            <p>{row.destination_rationale ?? DESTINATIONS[row.destination].long}</p>
+            <h4>Where it landed — {DESTINATIONS[row.destination].name}</h4>
+            <p>{row.destination_rationale ?? DESTINATIONS[row.destination].meaning}</p>
           </div>
 
           {row.reconciliation_note && (
@@ -211,3 +212,5 @@ function nearestDate(data: Array<{ date: string }>, target: string): string | un
   }
   return best;
 }
+
+
