@@ -9,20 +9,16 @@
     "preview": "vite preview",
     "test": "vitest run",
     "deploy": "npm run build && wrangler deploy",
-    "shots": "node shots/shoot.mjs",
-    "a11y": "node shots/a11y.mjs"
+    "shots": "node shots/capture.mjs",
+    "walk": "node shots/walk.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
-    "d3-sankey": "^0.12.3",
-    "d3-shape": "^3.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "@types/d3-sankey": "^0.12.5",
-    "@types/d3-shape": "^3.1.8",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^4.3.4",

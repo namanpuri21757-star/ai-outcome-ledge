@@ -1,5 +1,5 @@
 import type { Company, Env, ObservationRow, RunError, RunResult } from './types';
-import { Db } from './db';
+import { Db, SubrequestBudget, SubrequestBudgetError } from './db';
 import { SEC_TICKER_MAP_URL, companyFactsUrl, extractSeries, parseTickerMap, secFetch } from './sec';
 import { StooqError, fetchPrices, probeStooq } from './stooq';
 import {
@@ -12,16 +12,25 @@ const OUTCOME_SERIES = ['operating_margin_q', 'price_close', 'opex_q', 'revenue_
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Every run writes a row to fetch_runs, successful or not. */
+/**
+ * Every run writes a row to fetch_runs, successful or not.
+ *
+ * Both writes go through `db.reserved()`, which is allowed to spend the
+ * held-back subrequests. Without that, a job that ran out of requests
+ * could not file the fact that it had run out — which is exactly how
+ * every outcomes run in this table came to have a null `finished_at`
+ * and an empty `errors` array.
+ */
 async function recordRun(db: Db, trigger: string, job: string, fn: () => Promise<RunResult>) {
-  const run = await db.insertReturning<{ id: number }>('fetch_runs', {
+  const book = db.reserved();
+  const run = await book.insertReturning<{ id: number }>('fetch_runs', {
     trigger,
     job,
     started_at: new Date().toISOString(),
   });
   try {
     const result = await fn();
-    await db.patch('fetch_runs', `id=eq.${run.id}`, {
+    await book.patch('fetch_runs', `id=eq.${run.id}`, {
       finished_at: new Date().toISOString(),
       ok: result.ok,
       companies_attempted: result.companiesAttempted,
@@ -31,10 +40,14 @@ async function recordRun(db: Db, trigger: string, job: string, fn: () => Promise
     });
     return result;
   } catch (err: any) {
-    await db.patch('fetch_runs', `id=eq.${run.id}`, {
+    await book.patch('fetch_runs', `id=eq.${run.id}`, {
       finished_at: new Date().toISOString(),
       ok: false,
       errors: [{ scope: 'run', message: String(err?.message ?? err) }],
+      notes:
+        err instanceof SubrequestBudgetError
+          ? 'The job ran out of subrequests inside one invocation. Give it its own cron trigger, or reduce the number of round trips it makes.'
+          : 'The job threw. The message is on the error.',
     });
     throw err;
   }
@@ -43,8 +56,11 @@ async function recordRun(db: Db, trigger: string, job: string, fn: () => Promise
 // ---------------------------------------------------------------------------
 // Job 1: fundamentals from SEC XBRL
 // ---------------------------------------------------------------------------
-export async function runFundamentals(env: Env): Promise<RunResult> {
-  const db = new Db(env);
+export async function runFundamentals(
+  env: Env,
+  budget: SubrequestBudget = new SubrequestBudget(),
+): Promise<RunResult> {
+  const db = new Db(env, budget);
   const errors: RunError[] = [];
   let rowsWritten = 0;
 
@@ -76,14 +92,22 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
   const withCik = companies.filter((c) => c.cik);
   const noCik = companies.filter((c) => !c.cik);
 
+  // Collected across every company and written once at the end.
+  //
+  // This was one upsert per company, which cost seventeen subrequests
+  // where six will do — and the subrequest budget is the scarce thing in
+  // a Worker invocation, not the payload size. `db.upsert` already
+  // chunks at 500 rows, so batching here does not make any one request
+  // larger than it was allowed to be.
+  const pending: ObservationRow[] = [];
+
   for (const c of withCik) {
     try {
       const facts = await secFetch(companyFactsUrl(c.cik!), env.SEC_USER_AGENT);
       const series = extractSeries(facts);
-      const rows: ObservationRow[] = [];
       for (const s of series) {
         for (const p of s.points) {
-          rows.push({
+          pending.push({
             company_id: c.id,
             series_key: s.key,
             observed_at: p.end,
@@ -95,7 +119,6 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
           });
         }
       }
-      if (rows.length) rowsWritten += await db.upsert('observations', rows, OBS_CONFLICT);
       if (!series.length) {
         errors.push({
           scope: c.slug,
@@ -109,6 +132,8 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
     }
     await sleep(150); // comfortably inside the SEC's 10 requests per second
   }
+
+  if (pending.length) rowsWritten = await db.upsert('observations', pending, OBS_CONFLICT);
 
   return {
     job: 'fundamentals',
@@ -130,8 +155,11 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
 // ---------------------------------------------------------------------------
 // Job 2: daily closes from Stooq
 // ---------------------------------------------------------------------------
-export async function runPrices(env: Env): Promise<RunResult> {
-  const db = new Db(env);
+export async function runPrices(
+  env: Env,
+  budget: SubrequestBudget = new SubrequestBudget(),
+): Promise<RunResult> {
+  const db = new Db(env, budget);
   const errors: RunError[] = [];
   let rowsWritten = 0;
   let attempted = 0;
@@ -201,8 +229,11 @@ export async function runPrices(env: Env): Promise<RunResult> {
 // trace otherwise, which is how it came to report "0 rows, no errors"
 // while every margin figure in the interface sat blank.
 // ---------------------------------------------------------------------------
-export async function runOutcomes(env: Env): Promise<RunResult> {
-  const db = new Db(env);
+export async function runOutcomes(
+  env: Env,
+  budget: SubrequestBudget = new SubrequestBudget(),
+): Promise<RunResult> {
+  const db = new Db(env, budget);
   const errors: RunError[] = [];
   const tally: Record<string, number> = {};
   const count = (r: OutcomeReason) => { tally[r] = (tally[r] ?? 0) + 1; };
@@ -342,9 +373,14 @@ export async function runOutcomes(env: Env): Promise<RunResult> {
  * take the margin figures down with it, even though the SEC was fine.
  * Partial and visible beats none and silent.
  */
-async function runStep(db: Db, trigger: string, job: string, fn: () => Promise<RunResult>): Promise<RunResult> {
+async function runStep(
+  db: Db,
+  trigger: string,
+  job: string,
+  fn: (budget: SubrequestBudget) => Promise<RunResult>,
+): Promise<RunResult> {
   try {
-    return await recordRun(db, trigger, job, fn);
+    return await recordRun(db, trigger, job, () => fn(db.budget));
   } catch (err: any) {
     return {
       job,
@@ -374,14 +410,36 @@ async function runStep(db: Db, trigger: string, job: string, fn: () => Promise<R
  */
 export const PRICES_ON_SCHEDULE = false;
 
+/**
+ * Which job each cron trigger runs.
+ *
+ * One job per trigger, and that is the whole point: a Worker's
+ * subrequest budget is per invocation, so two jobs sharing one
+ * invocation share one budget. Fundamentals and outcomes used to run
+ * back to back on `15 6 * * *`; fundamentals finished, outcomes started
+ * with what was left, and outcomes is the job that fills every margin
+ * figure in the interface. Thirty minutes apart costs nothing and gives
+ * each of them the whole ceiling.
+ */
+export const CRON_JOBS: Record<string, 'fundamentals' | 'prices' | 'outcomes'> = {
+  '15 6 * * *': 'fundamentals',
+  '45 6 * * *': 'outcomes',
+};
+
 export async function runAll(env: Env, trigger: string) {
-  const db = new Db(env);
   const results: RunResult[] = [];
-  results.push(await runStep(db, trigger, 'fundamentals', () => runFundamentals(env)));
+  // A fresh budget per job, because `/run?job=all` is a convenience for
+  // a human at a terminal rather than the scheduled path: each job is
+  // still one invocation's worth of work, and making them share here
+  // would reproduce the failure the cron split exists to remove.
+  results.push(await runStep(new Db(env, new SubrequestBudget()), trigger, 'fundamentals',
+    (b) => runFundamentals(env, b)));
   if (PRICES_ON_SCHEDULE) {
-    results.push(await runStep(db, trigger, 'prices', () => runPrices(env)));
+    results.push(await runStep(new Db(env, new SubrequestBudget()), trigger, 'prices',
+      (b) => runPrices(env, b)));
   }
-  results.push(await runStep(db, trigger, 'outcomes', () => runOutcomes(env)));
+  results.push(await runStep(new Db(env, new SubrequestBudget()), trigger, 'outcomes',
+    (b) => runOutcomes(env, b)));
   return results;
 }
 
@@ -396,19 +454,16 @@ export default {
     const missing = missingConfig(env);
     if (missing.length) throw new Error(`Worker is missing secrets: ${missing.join(', ')}`);
 
-    const db = new Db(env);
-    // `runStep`, not `recordRun`: the outcomes job is the one that fills
-    // the margin column, and it must still run when the collector ahead
-    // of it could not reach its source.
-    if (controller.cron === '30 22 * * 1-5') {
-      if (PRICES_ON_SCHEDULE) {
-        await runStep(db, controller.cron, 'prices', () => runPrices(env));
-      }
-      await runStep(db, controller.cron, 'outcomes', () => runOutcomes(env));
-    } else {
-      await runStep(db, controller.cron, 'fundamentals', () => runFundamentals(env));
-      await runStep(db, controller.cron, 'outcomes', () => runOutcomes(env));
-    }
+    // One trigger, one job, one subrequest budget. `runStep` rather than
+    // `recordRun` so a throw is still recorded rather than escaping.
+    const job = CRON_JOBS[controller.cron];
+    if (!job) return;
+    if (job === 'prices' && !PRICES_ON_SCHEDULE) return;
+
+    const db = new Db(env, new SubrequestBudget());
+    const run =
+      job === 'fundamentals' ? runFundamentals : job === 'prices' ? runPrices : runOutcomes;
+    await runStep(db, controller.cron, job, (b) => run(env, b));
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -439,11 +494,11 @@ export default {
       if (missing.length) return json({ error: `Missing secrets: ${missing.join(', ')}` }, 500);
 
       const job = url.searchParams.get('job') ?? 'all';
-      const db = new Db(env);
+      const db = new Db(env, new SubrequestBudget());
       try {
-        if (job === 'fundamentals') return json(await recordRun(db, 'manual', job, () => runFundamentals(env)));
-        if (job === 'prices') return json(await recordRun(db, 'manual', job, () => runPrices(env)));
-        if (job === 'outcomes') return json(await recordRun(db, 'manual', job, () => runOutcomes(env)));
+        if (job === 'fundamentals') return json(await recordRun(db, 'manual', job, () => runFundamentals(env, db.budget)));
+        if (job === 'prices') return json(await recordRun(db, 'manual', job, () => runPrices(env, db.budget)));
+        if (job === 'outcomes') return json(await recordRun(db, 'manual', job, () => runOutcomes(env, db.budget)));
         return json(await runAll(env, 'manual'));
       } catch (err: any) {
         return json({ error: String(err?.message ?? err) }, 500);

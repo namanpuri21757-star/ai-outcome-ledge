@@ -135,6 +135,42 @@ describe('runOutcomes still produces the outcomes', () => {
     expect(eight.rowsWritten).toBe(four.rowsWritten * 2);
   });
 
+  it('writes rows rather than nothing, whenever claims and observations both exist', async () => {
+    // The condition the interface actually depends on. `claim_outcomes`
+    // sat at zero rows for the whole life of the project while every
+    // margin figure on screen read as a dash, and no test failed. This
+    // one does: given a corpus with a series, a run that writes nothing
+    // is a broken run, whatever else it reports.
+    stubSupabase(45);
+    const result = await runOutcomes(env);
+
+    expect(result.rowsWritten).toBeGreaterThan(0);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    // And it says how many it could measure, not just how many it wrote.
+    expect(result.notes).toMatch(/Margin outcomes: .*measured/);
+  });
+
+  it('says which branch it took when it genuinely can measure nothing', async () => {
+    // The honest zero: claims exist, observations do not. It must be
+    // distinguishable from the broken zero above.
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      const u = String(url);
+      if (init?.method === 'POST') return new Response('[]', { status: 201 });
+      if (u.includes('/claims')) {
+        return new Response(JSON.stringify([
+          { id: 'c1', company_id: 'co-1', claim_date: '2025-02-14' },
+        ]), { status: 200 });
+      }
+      return new Response('[]', { status: 200 });
+    }));
+
+    const result = await runOutcomes(env);
+    expect(result.rowsWritten).toBe(0);
+    expect(result.ok).toBe(false);
+    expect(result.errors[0].message).toContain('No observations were read at all');
+  });
+
   it('reports a series that fails without losing the others', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
       const u = String(url);

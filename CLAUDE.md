@@ -10,12 +10,21 @@ memory.
 A maintained record of every public claim of an AI gain, coded against what was
 actually measured. Half hand-coded, half machine-maintained.
 
-**The single job:** let a reader see the distance between a number being *real*
-and a number being *locatable in a financial statement*.
+**The single job:** a reader arrives having seen a number — "IBM saved $3.5B
+with AI" — and leaves able to say whether that number appears anywhere in a
+financial statement, and if it does not, which of five reasons applies.
 
 **The output test:** after using this, a reader can name specific companies whose
 AI gains did or did not reach profit, and say why. If a change does not help with
 that, it is not a feature.
+
+The current corpus is 84 rows across 45 companies and research populations. The
+headline result: **$428.0M of $8.393B in claimed AI gains — 5.1% — is traceable
+to a named line item in a filing.**
+
+`REBUILD.md` holds the decision record for the 2026-08-15 rebuild: the three
+candidate architectures, why the chosen one won, what was deleted, and every
+judgment call made without asking. Read it before proposing a structural change.
 
 ---
 
@@ -24,11 +33,11 @@ that, it is not a feature.
 | Piece | Where | Notes |
 |---|---|---|
 | Frontend | `web/` — Vite + React 19 + TypeScript | `npm run deploy` from `web/`. **Not** on push |
-| Collector | `worker/` — Cloudflare Worker, cron | Deployed with `npx wrangler deploy` from `worker/` |
+| Collector | `worker/` — Cloudflare Worker, cron | `npx wrangler deploy` from `worker/` |
 | Data | Supabase Postgres | Schema in `supabase/`, run in the SQL editor |
 
-Frontend reads the `v_ledger` view at runtime with the anon key. RLS limits anon
-to reading published rows and inserting a submission.
+The frontend reads `v_ledger`, `companies` and `observations` at runtime with the
+anon key. RLS limits anon to reading published rows and inserting a submission.
 
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are **build-time** variables:
 Vite bakes them into the bundle. Changing them requires a new deploy, not just a
@@ -44,7 +53,8 @@ If that prints `YOUR-PROJECT-REF`, the build is a placeholder build. Do not
 deploy it; it replaces a working site with the config-error state.
 
 **Never put the service-role key anywhere in `web/`.** It belongs only in the
-Worker's Cloudflare secret store.
+Worker's Cloudflare secret store. `test/aggregate.test.ts` and
+`test/interface.test.ts` both fail if the string appears in `web/src`.
 
 ---
 
@@ -57,27 +67,35 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **336** web tests, **109** worker tests, both typechecks silent, build
-clean.
+Expected: **321** web tests, **128** worker tests, both typechecks silent, build
+clean with no warnings.
 
-**Look at the screens before you call a UI change done.** The app renders
-against generated rows with no database:
+**Look at the screens before you call a UI change done.** The app renders against
+generated rows with no database:
 
 ```
 cd web && VITE_FIXTURES=1 npx vite --port 5199   # in one shell
-cd web && npm run shots && npm run a11y          # in another
+cd web && npm run shots                          # in another
 ```
 
-`npm run shots` writes every view, plus mobile and empty states, to
-`shots/out/` (git-ignored) and fails on a console error. `npm run a11y` checks
-what a screenshot cannot: that tab reaches the flow diagram, that Enter on a
-node holds it and the diagram visibly says so, that Escape lets go, that a held
-node and a pin both survive a reload, that a narrow screen never scrolls
-sideways, and that nothing transitions under reduced motion. The fixtures are synthetic and clearly labelled; they are
-behind `import.meta.env.DEV`, so production builds drop the module entirely.
+`npm run shots` takes `name=hash` pairs and writes both widths. On Git Bash,
+prefix it with `MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'` — otherwise MSYS
+rewrites `#/method` into a Windows path, every shot silently captures the home
+page, and the images look plausible while showing the wrong view.
 
-`npm test` in `worker/` never touches the network. The live check is separate
-and deliberate:
+The real check is the scripted click-through, which runs against the built
+output and asserts behaviour a screenshot cannot:
+
+```
+cd web && npx vite build && npx vite preview --port 5200
+cd web && npm run walk
+```
+
+70 checks at 1440px and 390px: the finding above the fold, cross-view total
+consistency, filter scope, deep-link reload, browser back, keyboard reach,
+focus rings, Escape, sideways scrolling, and zero console errors.
+
+`npm test` in `worker/` never touches the network. The live check is separate:
 
 ```
 cd worker && npm run smoke
@@ -95,78 +113,234 @@ says so.
 
 ---
 
-## Architecture rules
+## Architecture
 
-**One vocabulary file.** Every user-facing label lives in `web/src/lib/labels.ts`
-and nowhere else. Never write a destination name, a basis name, or a condition
-name as a string literal in a component. Two copies drift.
+Five surfaces. Three in the nav, two reached by clicking a thing.
+
+```
+#/                    the ledger — the finding, the breakdown, the readout, every row
+#/claim/<ref>         one claim, fully unpacked. The only place a row is shown whole
+#/company/<slug>      one company's whole record, with a generated verdict
+#/method              how a row is coded and how every figure is computed
+#/maintenance         collector health, the checking queue, the submission inbox
+```
+
+Ten top-level views were reduced to this. `REBUILD.md` has the kill list with a
+reason per view. **A deleted view is deleted, not hidden:** its name is gone from
+`ViewName`, an unknown hash lands on the ledger, and `test/interface.test.ts`
+fails if any of the deleted files, imports or route names reappear.
+
+### Invariants that must not be broken
+
+**One function adds dollars up.** `totals()` in `lib/aggregate.ts` is the only
+place in `web/src` allowed to sum `claimed_amount_usd` or `traceable_to_pl_usd`.
+Every figure on every screen is a field of what it returns, or of what it returns
+for a subset. `test/aggregate.test.ts` walks the source tree and fails if any
+other file folds a money column, and asserts that destination buckets, kind
+buckets and company profiles each sum to the whole across six filter states.
+
+This rule exists because the previous build broke it: the flow diagram needed its
+own arithmetic to draw ribbons, and the same screen read `$428M traceable` in the
+headline and `$451M traceable` in the sidebar. Two numbers for one quantity costs
+more credibility than either number buys.
+
+**The denominator is claims that named dollars.** A claim stated as "opex down
+33%" contributes nothing to a dollar total, so dollars traced against it cannot
+count toward the traceable share either. `totals()` returns those separately as
+`tracedOutsideDenominatorUsd`, and the interface shows them whenever non-zero.
+Never fold them in, and never drop them.
+
+**Traceable is not clamped.** A row coded with more traceable than claimed is a
+research defect to surface, not an arithmetic edge to hide behind a `Math.min`.
+`overTracedClaims` counts them and `GapBar` says so on the row.
+
+**Only `gain_claim` rows enter money totals.** A $2T market cap, a $6.3B
+acquisition and a $60M saving are different objects.
+
+**Filters belong to the ledger and to nothing else.** `route.ts` refuses to
+serialise filter parameters on any view but `#/`, and returns `EMPTY_FILTERS` for
+any other view even when the URL carries them by hand. That is the mechanism, not
+a convention: it is why a company page can no longer report "6 gain claims worth
+$4.26B" beside a sidebar reading "10 rows · $4.15B". Going back restores the
+selection, because the previous history entry still carries it. There is no
+global sidebar and no global totals.
+
+**One vocabulary file, and one way to define a term.** Every user-facing label
+lives in `web/src/lib/labels.ts`. Every definition a reader can open comes from
+`define()` in that same file, rendered by `<Term>`. There is no second copy of
+any definition text in `src/`, none in the stylesheet, and no native `title`
+attribute used as the only way to learn a term — `test/interface.test.ts` fails
+on all three. The Method page renders `glossary()`, so a vocabulary entry cannot
+exist without appearing there.
+
+**Definitions expand in flow, never as an overlay.** `.term-body` pushes content
+down. Nothing in this app is positioned over the content it explains.
 
 **Database codes never reach the interface.** `destination` is stored 0–5 and
-rendered as position on a five-step ladder, because a leading numeral reads as a
-quantity when it is a rank. Codes survive in the CSV export and each row's fine
-print. If you find yourself printing a raw code, stop.
+rendered by name. Codes survive in the CSV export and in each row's fine print.
 
-**Generated, not typed.** Every sentence on the findings page and every company
-verdict is assembled from the rows at render time. Never write prose that states
-a fact about the data — it goes stale silently and this is a project about
-numbers being checkable. If a query returns nothing, say so; never fall back to
-copy describing data that is not there.
+**Nulls are a real state.** A missing figure is not zero and not the smallest
+value: it sorts last in both directions, and it is written out in words rather
+than rendered as a dash. `test/interface.test.ts` fails on a bare em dash in JSX.
 
-**Only `gain_claim` rows enter money totals.** A $2T market-cap figure, a $6.3B
-acquisition and a $60M saving are different objects. Summing them makes the
-headline meaningless. `totals()` in `filters.ts` enforces this; do not bypass it.
-
-**Nulls are a real state.** A missing margin delta is not zero and not the
-smallest value — it sorts last in both directions, and renders as an em dash.
-An uncoded condition is not "not met". Never coerce.
+**Every empty state states its reason.** An empty selection names the filters
+responsible. An unmeasurable claim names the dates that make it unmeasurable.
 
 **Pure logic lives in `web/src/lib/`, out of components,** so it is testable
 without a browser. New logic goes there with tests, not inside a `.tsx`.
 
-**One scale for every bar.** `max` is computed once in `App.tsx` and threaded
-down, so two reconciliation bars in different views stay comparable.
+**One scale for every bar.** `barMax()` is computed from the whole corpus, not
+from what is on screen, so a bar under a filter stays comparable to the same bar
+without one.
 
-**Every size is a rung on one ramp.** `--t-2xs` … `--t-3xl` in `styles.css`,
-anchored at 14px with a ratio of 1.2, plus a 4px spacing scale (`--s-*`) and
-two motion tokens. Never write a raw `px` font-size in a rule; sizes a pixel
-apart read as noise rather than as hierarchy.
+**One ladder order.** `DESTINATION_ORDER` in `labels.ts` is the only ordering of
+destinations, and `byDestination()` always returns all six, including empty ones
+— an empty destination is a finding, not an absence.
 
-**Labels cannot overlap by construction, not by tuning.** `lib/flowLayout.ts`
-makes the gap between two Sankey nodes equal to the height of one node label,
-so two labels cannot meet however thin the lanes get, and the number of named
-lanes is then whatever that gap allows in the height available. `NAME_SIZE` and
-`VALUE_SIZE` there must stay equal to `.flow-node-name` and `.flow-node-value`
-in the stylesheet.
+**The signature element is the gap bar:** solid ledger green traced, 45° audit
+hatch untraced, and its two figures always written out beside it. Do not restyle
+it, do not replace it with a progress bar, do not add rounded corners. An
+unlabelled hatched bar is not an encoding.
 
-**A column name is written once.** `LedgerView` and `CompaniesView` each hold a
-`COLUMNS` map used both for the header cell and for the `data-label` the cell
-carries when the layout stacks on a narrow screen. CSS reads it with
-`attr(data-label)` — never hard-code a user-facing name in a stylesheet.
+**No view scrolls sideways.** Enforced globally in `styles.css` and asserted by
+the click-through at 390px.
 
-**No view may scroll sideways to reach its answer.** Below their breakpoints
-the flow diagram becomes a ladder (`FlowLadder`), and the ledger table and
-company list become stacked blocks. Dropping columns instead is not an option:
-the ones that fall off the right-hand edge are always the ones carrying the
-reconciliation.
+**Body text is never below 16px.** `--t-sm` is the floor. No raw pixel
+font-size may appear in a rule; every size is a rung on the ramp.
 
-**The selection lives in the URL, not in a `useState`.** `route.ts` serialises
-`Filters` and the pinned companies into the hash, and `App.tsx` reads them back
-out of `parseHash`. Every state of this app is therefore a link, and browser
-back steps through selections. Never reintroduce a local filter state: two
-sources of truth for the selection is how a filter survives one click and not
-the next. Only non-default values are written, so a clean view keeps a clean
-URL.
+---
 
-**One ladder order, used everywhere.** `DESTINATION_ORDER` in `labels.ts` is the
-only ordering of destinations. The flow diagram reads top-to-bottom in it and
-the pattern grid stacks its groups in it. If position means one thing in one
-view and another elsewhere, position stops meaning anything.
+## The margin window, and why it is derived in the browser
 
-**The flow diagram is the reconciliation bar unrolled, not a second visual
-language.** Ribbons resolve into the same solid green and the same 45° hatch the
-bar uses. `MIN_WIDTH` in `Sankey.tsx` must equal `.flow-svg { min-width }` — the
-layout is computed from the measured width, so if CSS stretches the element past
-what was measured, every label lands in the wrong place.
+"Does the claim show up in the financials?" is answered per claim by
+`lib/outcome.ts`: the last operating margin filed before the claim, the reading a
+quarter after, the reading a year after, each with its date, plus a delta and a
+generated sentence saying what the delta can and cannot support. It replaced a
+quarterly line chart that a reader could not get an answer from.
+
+`claim_outcomes` has no column for "why is this blank", and the Worker writes no
+row at all when a claim cannot be measured — so the interface would have nothing
+to distinguish "this company does not file with the SEC" from "a year has not
+passed yet" from "the collector is broken". The reason is therefore computed in
+the browser from the observation coverage the anon key can already read, which is
+strictly better than a stored code: the explanation names the actual date range
+that exists, so a reader can check it.
+
+**The window constants in `web/src/lib/outcome.ts` must equal those in
+`worker/src/outcomes.ts`.** `test/outcome.test.ts` reads the Worker source and
+fails if they drift, because the browser and the collector disagreeing about the
+same claim is worse than either being wrong alone.
+
+Current coverage: 26 of 84 rows have a one-quarter reading, 8 have a one-year
+reading, 33 have a baseline. Eight is not a column, which is why there is no
+margin column in the row list — each row states its measurement status in words
+instead.
+
+---
+
+## Known state
+
+- **Nothing deploys on push. The frontend is a Worker serving static assets,
+  not a Pages project.** `wrangler pages project list` returns nothing for this
+  account, `*.pages.dev` does not resolve, and every deployment on all three
+  Workers reads `Source: wrangler`. Pushing to `main` publishes code to GitHub
+  and changes nothing that is serving. Deploy the site with `npm run deploy`
+  from `web/` (config in `web/wrangler.jsonc`) and the collector with
+  `npx wrangler deploy` from `worker/`.
+
+- **There are two frontend Workers and only one of them is live.**
+  `ai-outcome-ledge1` is what `web/wrangler.jsonc` targets and has the most
+  recent deployment. `ai-outcome-ledge` no longer resolves. Confirm and delete
+  the dead one, or the next person will update the wrong one.
+
+- **The outcomes job ran out of subrequests, and that is why it left no trace**
+  (diagnosed and fixed 2026-08-15). It issued one query per company per series —
+  four series against forty-five companies, about 180 sequential round trips in
+  one invocation. A Worker invocation has a subrequest ceiling (50 on the free
+  plan), and exceeding it does not raise something a job can catch: the isolate
+  stops. The cruel part is why it was invisible — the catch block's "record the
+  failure" PATCH is itself a subrequest, so it died too, and every outcomes row
+  in `fetch_runs` had a null `finished_at`, `ok` null, an empty `errors` array
+  and no notes. On the old health strip it read as "the outcomes job wrote no
+  rows", which is true and points at entirely the wrong thing; two sessions went
+  looking for a data problem that was not there.
+
+  Every observed failure in `fetch_runs` fits the ceiling exactly: fundamentals
+  costs about 26 requests and finished; prices costs about 21 and finished when
+  it ran first but died when it followed fundamentals in the same invocation;
+  outcomes wanted 180 and never finished from any starting point.
+
+  Three things fix it, and all three matter:
+
+  1. **One query per series for the whole table**, grouped by company in memory.
+     Four reads instead of 180. `test/runOutcomes.test.ts` asserts the read count
+     stays flat as companies are added — asserting only on rows written passes
+     just as happily with the loop the wrong way round.
+  2. **One job per cron trigger.** `CRON_JOBS` in `worker/src/index.ts` maps each
+     trigger to exactly one job, so no two jobs share an invocation's budget.
+     `test/budget.test.ts` reads `wrangler.jsonc` and fails if the two lists
+     disagree.
+  3. **`SubrequestBudget` in `worker/src/db.ts`** counts every outbound request
+     and stops the job *before* the ceiling, holding back a reserve that only the
+     `fetch_runs` writes may spend. A job that asks for too much now fails
+     loudly with the number it reached, instead of vanishing.
+
+  **Check it with `finished_at`, not with `rows_written`:**
+
+  ```
+  fetch_runs?select=job,started_at,finished_at,ok,rows_written,notes
+    &job=eq.outcomes&order=started_at.desc&limit=3
+  ```
+
+  A null `finished_at` means it died again.
+
+- **`Db.select` paginates with an explicit Range header, and the browser does
+  too.** PostgREST answers an over-cap request with HTTP 200 and a truncated
+  body — no error, no flag. `fetchAll` in `web/src/lib/supabase.ts` pages until a
+  page comes back short and throws `TruncatedError` rather than returning a
+  silently partial answer. Never add a `.limit()` and trust it.
+
+- **React 19, and no chart library, and no charts.** Recharts pinned the app to
+  React 18 and drew the margin series twice. The hand-rolled replacement is gone
+  too: the margin window is typeset numbers, not a plot, so `d3-shape` and
+  `d3-sankey` were removed with it.
+
+- **Astryx was evaluated and rejected on measurement, not taste** (2026-08-15).
+  It is real, MIT, and its type-scale methodology is what this project's ramp is
+  modelled on. But it needs React 19 *and* StyleX, and one `Button` costs
+  +131 kB of CSS and +136 kB of JS, because `astryx.css` is a static stylesheet
+  for the whole system that cannot be tree-shaken. shadcn/ui was rejected for the
+  same shape of reason. If this is revisited, re-measure rather than re-reason.
+
+- **Stooq stopped serving automated clients (observed 2026-08-15).** Every symbol
+  returns HTTP 200 with a JavaScript proof-of-work interstitial. The parser
+  classifies it as `challenge`, `runPrices` stops at the first one and reports it
+  once, and `npm run smoke` checks it on demand. **Price history is frozen until
+  a price source is chosen; margins come from SEC XBRL and are unaffected.** Do
+  not "fix" this by solving the challenge — it is the site declining automated
+  access, and the answer is a different source.
+
+- **Prices are off the schedule, not deleted** (`PRICES_ON_SCHEDULE` in
+  `worker/src/index.ts`). The job is kept, tested and reachable at
+  `/run?job=prices`. `price_delta_4q` is null on all 84 rows, so no price figure
+  appears anywhere in the interface rather than a column of dashes.
+
+- **Teleperformance, Klarna and CBA do not file usable us-gaap data.** No margin
+  series is possible for them. This is expected, not a bug, and must not be
+  reported as a warning. The collector tags these with `expected: true` on the
+  `RunError`, `ok` ignores them, and the maintenance page lists them under
+  "Standing, and not a fault".
+
+- **`source_url` is null on all 84 rows.** The corpus records `source_name`,
+  `source_type` and `source_date` but no URLs. The claim page states the source
+  by name and date, says plainly that no URL is recorded, and offers the
+  generated EDGAR / Scholar lookups labelled as lookups rather than as the
+  source. Never fabricate one.
+
+- **`RUN_TOKEN` was rotated on 2026-08-15** to trigger the collectors during the
+  rebuild. The current value is in the final report of that session; rotate it
+  again with `npx wrangler secret put RUN_TOKEN` from `worker/` if that is not
+  acceptable.
 
 ---
 
@@ -176,7 +350,7 @@ Cool ledger paper, not warm cream. The subject is audit.
 
 ```
 --paper #edf0f3   --paper-raised #f7f9fa   --paper-sunk #e2e7ec
---ink #111a22     --ink-2 #46555f          --ink-3 #7c8b97
+--ink #111a22     --ink-2 #46555f          --ink-3 #6b7a86
 --rule #c9d2d9    --rule-strong #a5b3bd
 --traced #146b52  --claimed #2c5c8c        --gap #a8391f
 --transfer #8a6420 --quality #5b4a86
@@ -185,11 +359,15 @@ Cool ledger paper, not warm cream. The subject is audit.
 IBM Plex Sans Condensed (structure) / IBM Plex Serif (claims, so they read as
 quoted disclosure) / IBM Plex Mono (every number, so columns align).
 
-**Signature element:** the gap bar — solid green traced, diagonal-hatched red
-untraced. It is the argument. Do not restyle it, do not replace it with a
-progress bar, do not add rounded corners.
+The type ramp is `--t-2xs` … `--t-4xl` in `styles.css`, anchored at 16px with a
+ratio of 1.2, plus a 4px spacing scale (`--s-*`) and two motion tokens. Never
+write a raw `px` font-size in a rule.
 
-Zero border radius throughout. No gradients. No emoji.
+**Signature element:** the gap bar — solid green traced, diagonal-hatched red
+untraced. It is the argument.
+
+Zero border radius throughout. No gradients. No emoji. Scrollbars, focus rings
+and the font-swap flash are handled once, globally, at the top of `styles.css`.
 
 ---
 
@@ -199,114 +377,18 @@ Plain declarative sentences. Name things by what a reader controls, not by how
 the system is built.
 
 **Banned constructions:** "not simply X — it is actively Y", "oscillates
-between", "delve", "leverage" as a verb, "seamless", "robust", abstract
-nominalizations, invented jargon. Nobody talks like that and readers notice.
+between", "delve", "leverage" as a verb, "seamless", "robust", "unlock",
+"empower", abstract nominalizations, invented jargon. `test/interface.test.ts`
+greps for them.
 
 "Not traceable" must **always** carry the clarification that it does not mean the
 claim is false. Several of these claims are audited and true.
 
----
-
-## Known state
-
-- **Nothing deploys on push. The frontend is a Worker serving static assets,
-  not a Pages project.** `wrangler pages project list` returns nothing for this
-  account, `*.pages.dev` does not resolve, and every deployment on all three
-  Workers reads `Source: wrangler` — there is no build connected to the GitHub
-  repo, and `/accounts/.../builds/workers/<name>` answers 12040, "no build
-  configuration". Pushing to `main` publishes code to GitHub and changes
-  nothing that is serving. Deploy the site with `npm run deploy` from `web/`
-  (config in `web/wrangler.jsonc`) and the collector with `npx wrangler deploy`
-  from `worker/`.
-
-- **There are two frontend Workers and only one of them can be the live one.**
-  `ai-outcome-ledge` and `ai-outcome-ledge1` both carry assets, both are on
-  `*.ai-ledger.workers.dev`, and neither has a custom domain, so nothing in the
-  account distinguishes them. `ai-outcome-ledge1` has the most recent
-  deployment and is what `web/wrangler.jsonc` targets. Confirm that is right
-  and delete the other, or the next person will update the wrong one and
-  believe they have shipped.
-
-- **React 19, and no chart library.** Recharts pinned the app to React 18 and
-  was drawing the margin series twice, with the two call sites disagreeing
-  about whether margin was a ratio or a percentage. `components/TimeSeriesChart`
-  now draws it once, with the scale and tick arithmetic in `lib/chart.ts`.
-
-- **Astryx was evaluated and rejected on measurement, not taste** (2026-08-15).
-  It is real, MIT, and its type-scale methodology is what this project's ramp
-  is modelled on. But it needs React 19 *and* StyleX, and one `Button` costs
-  +131 kB of CSS and +136 kB of JS, because `astryx.css` is a static stylesheet
-  for the whole system that cannot be tree-shaken — carrying visual defaults
-  this design would then override. shadcn/ui was rejected for the same shape of
-  reason: it would import Tailwind alongside a hand-authored token system to
-  solve problems that were layout and encoding problems, not component
-  problems. If this is revisited, re-measure rather than re-reason.
-
-- **The Worker does not deploy on push, and drifting behind `main` is the
-  failure mode to check first.** The pagination fix below sat committed and
-  undeployed for a day while the interface showed the symptoms it had already
-  fixed, and the warning text on screen was the giveaway: it did not exist
-  anywhere in the source tree. When production behaviour contradicts the code,
-  run `npx wrangler deployments list` in `worker/` and compare the last
-  `Source: Upload` against `git log -- worker/` before diagnosing anything else.
-
-- **Stooq stopped serving automated clients (observed 2026-08-15).** Every
-  symbol now returns HTTP 200 with a JavaScript proof-of-work interstitial —
-  it hashes a challenge, posts a nonce to `/__verify`, and reloads. It is
-  served on the first request, on both stooq.com and stooq.pl, with or without
-  a User-Agent, so it is not a rate limit, not a changed URL, and not a wrong
-  ticker. The parser now classifies it as `challenge`, `runPrices` stops at the
-  first one and reports it once, and `npm run smoke` checks it on demand.
-  **Price history is frozen until a price source is chosen; margins come from
-  SEC XBRL and are unaffected.** Do not "fix" this by solving the challenge —
-  it is the site declining automated access, and the answer is a different
-  source, not a workaround.
-
-- **Prices are off the schedule, not deleted** (`PRICES_ON_SCHEDULE` in
-  `worker/src/index.ts`). A daily run would only ask a closed door twenty times.
-  The job is kept, tested and reachable at `/run?job=prices`, and `price_close`
-  stays in `OUTCOME_SERIES` so the observations collected before the wall went
-  up still produce outcomes — "Share price, one year" still reads for the claims
-  that have it. Wiring a new source means one `fetchPrices` implementation and
-  flipping that flag back.
-
-- **The outcomes job was not finding nothing, it was not finishing** (diagnosed
-  2026-08-15). It read one query per company per series — four series against
-  forty-five companies with published claims, so about a hundred and eighty
-  sequential round trips in one invocation — and never survived them. The
-  giveaway is in `fetch_runs`: every outcomes row had `finished_at` null, `ok`
-  null, an empty `errors` array and no notes, which is what an invocation
-  killed part-way through looks like, because neither the success patch nor the
-  catch block gets to run. On the health strip it read as "the outcomes job
-  wrote no rows", which is true and points at entirely the wrong thing; two
-  sessions went looking for a data problem that was not there.
-
-  It now issues one query per series for the whole table and groups by company
-  in memory: four reads against production instead of a hundred and eighty.
-  `test/runOutcomes.test.ts` asserts the read count stays flat as companies are
-  added, because asserting only on rows written passes just as happily with the
-  loop the wrong way round.
-
-  An earlier fix added explicit `Range` pagination to `Db.select`, which was
-  correct on its own terms — PostgREST silently truncates over-cap responses
-  with HTTP 200 — but it made every one of those hundred and eighty calls
-  potentially multi-request, so it moved the job further from finishing rather
-  than nearer.
-
-  **Check it with `finished_at`, not with `rows_written`:**
-
-  ```
-  fetch_runs?select=job,started_at,finished_at,ok,rows_written,notes
-    &job=eq.outcomes&order=started_at.desc&limit=3
-  ```
-
-  A null `finished_at` means it died again. A row with notes means it ran.
-- Teleperformance, Klarna and CBA do not file with the SEC. No margin series is
-  possible for them. This is expected, not a bug, and must not be reported as a
-  warning. Enforced in code: the collector tags these with `expected: true` on
-  the `RunError` (a jsonb field, not a schema change), `ok` ignores them, and
-  the health strip lists them under "expected, and not a fault" rather than
-  beside real problems.
+**Never write prose that states a fact about the data.** Every sentence on the
+ledger, every company verdict and every margin explanation is assembled from the
+rows at render time — `lib/readout.ts`, `companies.verdict()`, `outcome.reason`.
+A typed sentence about the numbers goes stale silently, and this is a project
+about numbers being checkable.
 
 ---
 

@@ -1,19 +1,21 @@
-import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
+import type { ClaimKind, EpistemicTag, MeasurementBasis, VerificationStatus } from './types';
 
 /* ===================================================================
-   VOCABULARY
+   VOCABULARY — every user-facing label, and every definition of one.
 
-   Every label a reader sees lives here and nowhere else.
+   Two rules this file enforces.
 
-   The rule this file enforces: database codes are for the database.
-   `5` is a destination rank, not a quantity, and rendering it as
-   "5 Margin" asks the reader to decode before they can read. The rank
-   still carries real information — how close the gain got to profit —
-   so it is preserved as `rank` and drawn as position on a ladder,
-   which is what position is for.
+   **Database codes are for the database.** `5` is a destination rank,
+   not a quantity, and rendering it as "5 Margin" asks the reader to
+   decode before they can read. The rank still carries real information —
+   how close the gain got to profit — so it is kept as `rank` and used
+   for ordering. The codes survive in the CSV export and in each row's
+   fine print, so nothing is lost for analysis.
 
-   The codes survive in the CSV export and in each row's fine print,
-   so nothing is lost for analysis.
+   **A coded term is never shown without a way to learn what it means.**
+   Every definition a reader can open comes from `define()` below, which
+   reads the same maps the labels come from. There is no second copy of
+   any definition text anywhere in `src/`, and none in the stylesheet.
    =================================================================== */
 
 export interface DestinationLabel {
@@ -80,7 +82,7 @@ export const DESTINATIONS: Record<number, DestinationLabel> = {
   },
 };
 
-/** Left-to-right, furthest from profit first. Position replaces the numeral. */
+/** Furthest from profit first, uncoded last. The only ordering in the app. */
 export const DESTINATION_ORDER = [1, 2, 3, 4, 5, 0];
 
 export function destination(rank: number | null | undefined): DestinationLabel {
@@ -133,6 +135,10 @@ export const BASES: Record<MeasurementBasis, BasisLabel> = {
   },
 };
 
+export const BASIS_ORDER: MeasurementBasis[] = [
+  'net_pl', 'unit_economics', 'gross_capacity', 'headcount', 'time', 'quality', 'activity', 'unverified',
+];
+
 export function basis(key: MeasurementBasis): BasisLabel {
   return BASES[key] ?? BASES.unverified;
 }
@@ -154,7 +160,8 @@ export const KINDS: Record<ClaimKind, { name: string; meaning: string }> = {
   },
   pricing: {
     name: 'Pricing',
-    meaning: 'A price per unit of output. The mechanism by which value passes through, not a saving anyone booked.',
+    meaning:
+      'A price per unit of output. The mechanism by which value passes through, not a saving anyone booked.',
   },
   research_finding: {
     name: 'Research',
@@ -162,18 +169,72 @@ export const KINDS: Record<ClaimKind, { name: string; meaning: string }> = {
   },
 };
 
+export const KIND_ORDER: ClaimKind[] = [
+  'gain_claim', 'counter_evidence', 'research_finding', 'context', 'pricing',
+];
+
+export function kind(key: ClaimKind): { name: string; meaning: string } {
+  return KINDS[key] ?? { name: key, meaning: '' };
+}
+
 export const VERIFICATION: Record<VerificationStatus, { name: string; meaning: string }> = {
-  verified_primary: { name: 'Primary source', meaning: 'Checked against a filing, dataset, or peer-reviewed paper.' },
-  secondary_only: { name: 'Secondary only', meaning: 'Sourced to press or company communications, not to a primary document.' },
-  needs_primary_source: { name: 'Needs checking', meaning: 'No primary source located yet. The next step is written on the row.' },
-  disputed: { name: 'Disputed', meaning: 'Credible sources conflict and the conflict has not been resolved.' },
+  verified_primary: {
+    name: 'Primary source',
+    meaning: 'Checked against a filing, dataset, or peer-reviewed paper.',
+  },
+  secondary_only: {
+    name: 'Secondary only',
+    meaning: 'Sourced to press or company communications, not to a primary document.',
+  },
+  needs_primary_source: {
+    name: 'Needs checking',
+    meaning: 'No primary source located yet. The next step is written on the row.',
+  },
+  disputed: {
+    name: 'Disputed',
+    meaning: 'Credible sources conflict and the conflict has not been resolved.',
+  },
 };
 
+export const VERIFICATION_ORDER: VerificationStatus[] = [
+  'verified_primary', 'secondary_only', 'needs_primary_source', 'disputed',
+];
+
+export function verification(key: VerificationStatus): { name: string; meaning: string } {
+  return VERIFICATION[key] ?? { name: key, meaning: '' };
+}
+
 export const TIERS: Record<number, string> = {
-  1: 'Primary — a filing, administrative dataset, or peer-reviewed paper',
-  2: 'Vendor- or self-originated',
-  3: 'Press or secondary reporting',
+  1: 'Primary — a filing, administrative dataset, or peer-reviewed paper.',
+  2: 'Vendor- or self-originated, so the source has an interest in the number.',
+  3: 'Press or secondary reporting, at one remove from the document.',
 };
+
+/**
+ * How confident the coder is in the row, as distinct from how good the
+ * source is. Previously rendered as the raw enum string with no label
+ * and no definition anywhere.
+ */
+export const EPISTEMIC: Record<EpistemicTag, { name: string; meaning: string }> = {
+  fact: { name: 'Stated fact', meaning: 'The source states it directly and the row repeats it.' },
+  strong: {
+    name: 'Strong reading',
+    meaning: 'Not stated in these words, but the source supports it closely.',
+  },
+  inference: {
+    name: 'Inference',
+    meaning: 'Derived from the source by a step of reasoning that could be argued with.',
+  },
+  speculation: {
+    name: 'Speculation',
+    meaning: 'A reading worth recording that the source does not establish.',
+  },
+  unknown: { name: 'Unclassified', meaning: 'Confidence in this row has not been coded yet.' },
+};
+
+export function epistemic(key: EpistemicTag): { name: string; meaning: string } {
+  return EPISTEMIC[key] ?? EPISTEMIC.unknown;
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -202,6 +263,7 @@ export const CONDITIONS = {
 };
 
 export const CONDITION_LIST = [CONDITIONS.billing, CONDITIONS.sink, CONDITIONS.permission];
+export type ConditionKey = keyof typeof CONDITIONS;
 
 /* ------------------------------------------------------------------ */
 
@@ -225,13 +287,163 @@ export function group(code: string | null | undefined): { name: string; blurb: s
 
 /* ------------------------------------------------------------------ */
 
-/** Phrases used in more than one place. Kept here so they cannot drift apart. */
+/** Phrases used in more than one place, so they cannot drift apart. */
 export const COPY = {
   traced: 'Traceable to a filing line',
   untraced: 'Not traceable to a filing line',
   tracedShort: 'Traceable',
   untracedShort: 'Not traceable',
   untracedMeaning:
-    'The claimed figure cannot be matched to a named line item in a financial statement. It does not mean the claim is false — several of these are audited and true. It measures the distance between a number being real and a number being locatable.',
+    'The claimed figure cannot be matched to a named line item in a financial statement. It does not mean the claim is false — several of these claims are audited and true. It measures the distance between a number being real and a number being locatable.',
   absorbed: 'Absorbed by a supplier',
+  title: 'AI Outcome Ledger',
+  strapline:
+    'Every public claim of an AI gain, coded against what was actually measured.',
 };
+
+/* ===================================================================
+   DEFINITIONS
+
+   One function. Everything that opens an explanation in the interface
+   goes through it, and it reads the maps above rather than holding a
+   second copy of the words.
+   =================================================================== */
+
+export type DefinitionKind =
+  | 'destination'
+  | 'basis'
+  | 'kind'
+  | 'verification'
+  | 'tier'
+  | 'epistemic'
+  | 'condition'
+  | 'group'
+  | 'phrase';
+
+export interface Definition {
+  /** What the reader clicked. */
+  label: string;
+  /** The explanation. Always at least one full sentence. */
+  body: string;
+  /** Extra lines, e.g. what passing and failing a condition look like. */
+  extra?: string[];
+}
+
+/** Standing phrases that are coded vocabulary without being a column. */
+export const PHRASES: Record<string, Definition> = {
+  traceable: { label: COPY.tracedShort, body: COPY.untracedMeaning },
+  untraceable: { label: COPY.untracedShort, body: COPY.untracedMeaning },
+  claimed: {
+    label: 'Claimed',
+    body: 'The figure as the source asserted it, in dollars. Only gain claims that named a dollar amount are counted, so that a market capitalisation and a savings figure never land in one total.',
+  },
+  destination: {
+    label: 'Where it landed',
+    body: 'One of five places a freed hour can end up, ordered by distance from profit. Only the last of them is margin.',
+  },
+  basis: {
+    label: 'What was measured',
+    body: 'What the claimed number actually counts, according to the source itself. It is the difference between an audited cost line and an hourly rate multiplied by a headcount.',
+  },
+  conditions: {
+    label: 'The three conditions',
+    body: 'A gain reaches profit only when the firm still gets paid for the work, has somewhere to put the freed capacity, and is allowed to change how the work is done. Rows are coded against all three, and an uncoded condition is not a failed one.',
+  },
+  margin_window: {
+    label: 'Operating margin around the claim',
+    body: 'The last operating margin the company filed before the claim, and the readings a quarter and a year after it, taken from SEC XBRL data. A margin that moved is consistent with a claim; it is not evidence for it, because operating margin moves for many reasons at once.',
+  },
+};
+
+export function define(kind: DefinitionKind, key: string | number): Definition | null {
+  switch (kind) {
+    case 'destination': {
+      const d = destination(Number(key));
+      return { label: d.name, body: d.meaning };
+    }
+    case 'basis': {
+      const b = BASES[key as MeasurementBasis];
+      return b ? { label: b.name, body: b.meaning } : null;
+    }
+    case 'kind': {
+      const k = KINDS[key as ClaimKind];
+      return k ? { label: k.name, body: k.meaning } : null;
+    }
+    case 'verification': {
+      const v = VERIFICATION[key as VerificationStatus];
+      return v ? { label: v.name, body: v.meaning } : null;
+    }
+    case 'tier': {
+      const t = TIERS[Number(key)];
+      return t ? { label: `Evidence tier ${key}`, body: t } : null;
+    }
+    case 'epistemic': {
+      const e = EPISTEMIC[key as EpistemicTag];
+      return e ? { label: e.name, body: e.meaning } : null;
+    }
+    case 'condition': {
+      const c = CONDITIONS[key as ConditionKey];
+      return c
+        ? {
+            label: c.name,
+            body: c.question,
+            extra: [`Passes when: ${c.passes}`, `Fails when: ${c.fails}`],
+          }
+        : null;
+    }
+    case 'group': {
+      const g = GROUPS[String(key)];
+      return g && g.blurb ? { label: g.name, body: g.blurb } : null;
+    }
+    case 'phrase':
+      return PHRASES[String(key)] ?? null;
+  }
+}
+
+/**
+ * Every definition in the app, generated. The Method page renders this
+ * rather than a typed list, so a vocabulary entry cannot exist without
+ * appearing there.
+ */
+export function glossary(): Array<{ heading: string; items: Array<Definition & { code: string }> }> {
+  return [
+    {
+      heading: 'Where the gain landed',
+      items: DESTINATION_ORDER.map((r) => ({ ...define('destination', r)!, code: String(r) })),
+    },
+    {
+      heading: 'What was measured',
+      items: BASIS_ORDER.map((b) => ({ ...define('basis', b)!, code: b })),
+    },
+    {
+      heading: 'Kind of row',
+      items: KIND_ORDER.map((k) => ({ ...define('kind', k)!, code: k })),
+    },
+    {
+      heading: 'The three conditions',
+      items: CONDITION_LIST.map((c) => ({ ...define('condition', c.key)!, code: c.key })),
+    },
+    {
+      heading: 'How well sourced',
+      items: [
+        ...VERIFICATION_ORDER.map((v) => ({ ...define('verification', v)!, code: v })),
+        ...[1, 2, 3].map((t) => ({ ...define('tier', t)!, code: String(t) })),
+      ],
+    },
+    {
+      heading: 'How confident the coding is',
+      items: (Object.keys(EPISTEMIC) as EpistemicTag[]).map((e) => ({
+        ...define('epistemic', e)!,
+        code: e,
+      })),
+    },
+    {
+      heading: 'Kind of company',
+      items: Object.keys(GROUPS).map((g) => ({ ...define('group', g)!, code: g })),
+    },
+    {
+      heading: 'Standing terms',
+      items: Object.keys(PHRASES).map((p) => ({ ...define('phrase', p)!, code: p })),
+    },
+  ];
+}

@@ -1,368 +1,269 @@
-import { useMemo, useState } from 'react';
-import type { LedgerRow } from '../lib/types';
-import type { CompanyProfile } from '../lib/companies';
-import { verdict } from '../lib/companies';
-import { destination, group, COPY } from '../lib/labels';
-import { usd, bps, shortDate } from '../lib/format';
-import { LazyMarginChart } from '../components/LazyMarginChart';
-import { GapBar } from '../components/GapBar';
-import { ClaimCard } from '../components/ClaimCard';
-import { ConditionFlags } from '../components/ConditionFlags';
-import { DestinationLadder } from '../components/DestinationLadder';
-import { Chip } from '../components/Chip';
-import { Sparkline } from '../components/Sparkline';
-import type { Filters } from '../lib/filters';
-import { marginSeries, relatedSlugs, relationReason } from '../lib/patterns';
+import { useMemo } from 'react';
+import type { Dataset } from '../lib/types';
+import { buildProfiles, emptyProfileNote, findProfile, verdict } from '../lib/companies';
+import { plural } from '../lib/aggregate';
+import { CONDITION_LIST, destination, kind } from '../lib/labels';
+import { shortDate, usd } from '../lib/format';
+import { MARGIN_SERIES, marginWindow, measuredCount } from '../lib/outcome';
+import { GapBar, GapKey } from '../components/GapBar';
+import { Term } from '../components/Term';
+import { MarginLine } from '../components/MarginWindow';
 
 /* ===================================================================
-   THE COMPANY PAGE
+   One company's whole record.
 
-   This did not exist before, and its absence caused most of the
-   confusion in the old app. The ledger's atom is a claim; the reader's
-   atom is a company. Every click that named a company could only lead
-   to a filtered list of claim rows, which is why arriving from the
-   destinations view lost the destination.
-
-   Order on this page is deliberate:
-     1. the measured margin chart   — the only non-assertion here
-     2. one generated verdict line  — what the rows add up to
-     3. the reconciliation and the three conditions
-     4. every claim, counter-evidence beside it rather than elsewhere
-
-   Nothing on this page is typed prose about the data.
+   Scope is stated, and it is absolute: this page is built from every
+   row belonging to the company, never from the ledger's selection. The
+   previous build handed it the active filter and then printed its own
+   unfiltered figures beside the filtered sidebar, so the same screen
+   said "10 rows · $4.15B" and "6 gain claims worth $4.26B" at once.
+   `route.ts` now makes that impossible — the route carries no filter.
    =================================================================== */
 
-export function CompanyView({
-  profile, allProfiles, context, max, filters, onFilters, pinned, onTogglePin, onCompany, onBack,
-}: {
-  profile: CompanyProfile | null;
-  allProfiles: CompanyProfile[];
-  context: string | null;
-  max: number;
-  filters: Filters;
-  onFilters: (f: Filters) => void;
-  pinned: string[];
-  onTogglePin: (slug: string) => void;
+interface Props {
+  data: Dataset;
+  slug: string;
+  onClaim: (ref: string) => void;
   onCompany: (slug: string) => void;
   onBack: () => void;
-}) {
-  const [tab, setTab] = useState<'all' | 'gains' | 'counter' | 'context'>('all');
+}
 
-  const markers = useMemo(
-    () =>
-      (profile?.gains ?? [])
-        .filter((r) => r.claim_date)
-        .map((r) => ({ date: r.claim_date, label: r.headline })),
-    [profile],
-  );
+export function CompanyView({ data, slug, onClaim, onCompany, onBack }: Props) {
+  const profiles = useMemo(() => buildProfiles(data.rows), [data.rows]);
+  const p = findProfile(profiles, slug);
 
-  if (!profile) {
+  if (!p) {
     return (
       <div className="empty">
-        <strong>No company by that name in the ledger.</strong>
-        It may have been recoded or removed.
-        <div style={{ marginTop: 14 }}>
-          <button type="button" className="btn" onClick={onBack}>Back to companies</button>
-        </div>
+        <p><strong>No company by that name in the ledger.</strong></p>
+        <p>{emptyProfileNote(slug)}</p>
+        <button type="button" className="btn" onClick={onBack}>Back to the ledger</button>
       </div>
     );
   }
 
-  const p = profile;
-  const g = group(p.groupCode);
-  const rows = tab === 'gains' ? p.gains
-    : tab === 'counter' ? p.counterEvidence
-    : tab === 'context' ? p.context
-    : p.rows;
+  const t = p.totals;
+  const margin = data.series.get(p.slug)?.get(MARGIN_SERIES);
+  const windows = p.gains.map((r) => marginWindow(r, margin));
+  const counted = measuredCount(windows);
+  const rowMax = Math.max(...p.rows.map((r) => r.claimed_amount_usd ?? 0), 1);
 
   return (
-    <div className="company">
-      {context && (
-        <div className="from-crumb">
-          You came here from <strong>{context}</strong>.
-          <button type="button" className="linklike" onClick={onBack}>Go back</button>
-        </div>
-      )}
+    <article className="company">
+      <nav className="crumb">
+        <button type="button" onClick={onBack}>The ledger</button>
+      </nav>
 
       <header className="company-head">
-        <div>
-          <span className="eyebrow">{g.name}{p.sector ? ` · ${p.sector}` : ''}</span>
-          <h2>{p.name}</h2>
-          <p className="verdict">{verdict(p)}</p>
-        </div>
-        <div className="company-idents">
-          {p.ticker && <span className="tag">{p.ticker}</span>}
-          <span className="tag">{p.isPublic ? 'Public filer' : 'Private'}</span>
-          <span className="tag">{p.rows.length} row{p.rows.length === 1 ? '' : 's'}</span>
-          <button
-            type="button"
-            className={'pin pin-wide' + (pinned.includes(p.slug) ? ' is-on' : '')}
-            aria-pressed={pinned.includes(p.slug)}
-            onClick={() => onTogglePin(p.slug)}
-          >
-            {pinned.includes(p.slug) ? 'Pinned to compare' : 'Pin to compare'}
-          </button>
-        </div>
+        <h2>{p.name}</h2>
+        <p className="company-idents">
+          <Term kind="group" code={p.groupCode ?? ''}>{p.groupName}</Term>
+          {p.sector && <><span aria-hidden="true">·</span><span>{p.sector}</span></>}
+          {p.ticker && <><span aria-hidden="true">·</span><span className="mono">{p.ticker}</span></>}
+          <span aria-hidden="true">·</span>
+          <span>{p.isPublic ? 'Files with the SEC' : 'Does not file with the SEC'}</span>
+        </p>
       </header>
 
-      {/* 1. The measurement, before any assertion. */}
-      <section className="company-chart">
-        <div className="section-head">
-          <h3>Operating margin, measured</h3>
-          <p className="small">
-            Rebuilt from this company's own SEC filings on every collector run. Dashed rules mark the
-            dates of its claims.
+      {/* The most important prose on the site. Serif, sentence case,
+          normal weight, generous measure — it was four lines of
+          all-caps condensed serif and nobody could read it. */}
+      <p className="company-verdict">{verdict(p, usd)}</p>
+
+      <p className="company-scope">
+        This page shows all {t.rows} {plural(t.rows, 'row')} recorded for {p.name}, between{' '}
+        {shortDate(p.firstClaim)} and {shortDate(p.lastClaim)}. Filters set on the ledger are not
+        applied here.
+      </p>
+
+      {/* ── Reconciliation ─────────────────────────────────────── */}
+      <section className="company-block" aria-labelledby="co-recon">
+        <h3 id="co-recon">What was claimed, and what can be found</h3>
+        {t.dollarClaims > 0 ? (
+          <>
+            <dl className="kv">
+              <div>
+                <dt><Term kind="phrase" code="claimed">Claimed</Term></dt>
+                <dd className="num">{usd(t.claimedUsd)}</dd>
+              </div>
+              <div>
+                <dt><Term kind="phrase" code="traceable">Traceable</Term></dt>
+                <dd className="num is-traced">{usd(t.tracedUsd)}</dd>
+              </div>
+              <div>
+                <dt><Term kind="phrase" code="untraceable">Not traceable</Term></dt>
+                <dd className="num is-gap">{usd(t.untracedUsd)}</dd>
+              </div>
+            </dl>
+            <GapBar claimed={t.claimedUsd} traced={t.tracedUsd} max={t.claimedUsd} labels={false} />
+          </>
+        ) : (
+          <p className="claim-null">
+            {t.gainClaims === 0
+              ? `${p.name} makes no gain claim in this ledger, so there is nothing to reconcile.`
+              : `None of ${p.name}'s ${t.gainClaims} gain ${plural(t.gainClaims, 'claim')} names a figure in dollars, so there is no reconciliation total for this company.`}
+            {t.tracedOutsideDenominatorUsd > 0 &&
+              ` ${usd(t.tracedOutsideDenominatorUsd)} is nonetheless traceable to a filing line.`}
           </p>
-        </div>
-        <LazyMarginChart companySlug={p.slug} markers={markers} height={240} />
-        <dl className="kv wide">
-          <dt>Margin one year after the latest measurable claim</dt>
-          <dd className={p.marginDelta4qBps === null ? 'is-null' : p.marginDelta4qBps > 0 ? 'is-traced' : 'is-gap'}>
-            {bps(p.marginDelta4qBps)}
-          </dd>
-          {p.marginMeasuredOn && (
-            <>
-              <dt>Measured against the claim dated</dt>
-              <dd>{shortDate(p.marginMeasuredOn)}</dd>
-            </>
-          )}
-        </dl>
+        )}
       </section>
 
-      {/* 2. What the rows add up to. */}
-      <section className="company-summary">
-        <div className="summary-block">
-          <h3>Reconciliation</h3>
-          {p.claimedUsd > 0 ? (
-            <>
-              <GapBar claimed={p.claimedUsd} traced={p.tracedUsd} max={max} large />
-              <dl className="kv">
-                <dt>Claimed across {p.gains.length} gain claim{p.gains.length === 1 ? '' : 's'}</dt>
-                <dd>{usd(p.claimedUsd)}</dd>
-                <dt>{COPY.traced}</dt>
-                <dd className="is-traced">{usd(p.tracedUsd)}</dd>
-                <dt title={COPY.untracedMeaning}>{COPY.untraced}</dt>
-                <dd className="is-gap">{usd(p.untracedUsd)}</dd>
-              </dl>
-            </>
-          ) : (
-            <p className="small">
-              No claim from this company carries a dollar figure, so there is nothing to reconcile.
-              That is a fact about the disclosure, not about the company.
-            </p>
-          )}
-        </div>
-
-        <div className="summary-block">
-          <h3>Where the gains landed</h3>
-          {p.destinationMix.length === 0 ? (
-            <p className="small">No gain claims recorded for this company.</p>
-          ) : (
-            <ul className="dest-mix">
-              {p.destinationMix.map((m) => (
-                <li key={m.rank}>
-                  <DestinationLadder rank={m.rank} compact />
-                  <span className="mix-count">
-                    {m.rows} claim{m.rows === 1 ? '' : 's'}
-                    {m.claimedUsd > 0 ? ` · ${usd(m.claimedUsd)}` : ''}
+      {/* ── Destination mix ────────────────────────────────────── */}
+      {p.destinationMix.length > 0 && (
+        <section className="company-block" aria-labelledby="co-dest">
+          <h3 id="co-dest">
+            <Term kind="phrase" code="destination" as="block">Where the gains landed</Term>
+          </h3>
+          <ul className="destmix">
+            {p.destinationMix.map((m) => {
+              const d = destination(m.rank);
+              return (
+                <li key={m.rank} className={'tone-' + d.tone}>
+                  <span className="destmix-name">
+                    <Term kind="destination" code={m.rank}>{d.name}</Term>
                   </span>
-                  <Chip
-                    small
-                    target={{ kind: 'destination', rank: m.rank }}
-                    filters={filters}
-                    onChange={onFilters}
-                  />
+                  <span className="destmix-count">
+                    {m.rows} {plural(m.rows, 'claim')}
+                    {m.claimedUsd > 0 ? ` · ${usd(m.claimedUsd)}` : ' · no dollar figure'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Conditions ─────────────────────────────────────────── */}
+      <section className="company-block" aria-labelledby="co-cond">
+        <h3 id="co-cond">
+          <Term kind="phrase" code="conditions" as="block">The three conditions</Term>
+        </h3>
+        <ul className="conditions">
+          {CONDITION_LIST.map((c) => {
+            const v = p.conditions[c.key];
+            return (
+              <li key={c.key} className={'condition is-' + (v === true ? 'pass' : v === false ? 'fail' : 'void')}>
+                <span className="condition-mark" aria-hidden="true">
+                  {v === true ? '✓' : v === false ? '✗' : '–'}
+                </span>
+                <span className="condition-body">
+                  <Term kind="condition" code={c.key}>{c.name}</Term>
+                  <span className="condition-state">
+                    {v === true ? c.passes
+                      : v === false ? c.fails
+                      : "Not coded consistently across this company's rows, so no single answer is given."}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      {/* ── What the filings show ──────────────────────────────── */}
+      <section className="company-block" aria-labelledby="co-margin">
+        <h3 id="co-margin">
+          <Term kind="phrase" code="margin_window" as="block">What the filings show</Term>
+        </h3>
+        {p.gains.length === 0 ? (
+          <p className="claim-null">
+            There is no gain claim here to measure against a filing.
+          </p>
+        ) : (
+          <>
+            <p className="section-lede">
+              {counted.measured} of {p.gains.length} gain {plural(p.gains.length, 'claim')} can be
+              measured against a filed operating margin
+              {counted.tooSoon > 0 && `, ${counted.tooSoon} not yet`}
+              {counted.impossible > 0 && `, and ${counted.impossible} not at all`}.
+            </p>
+            <ul className="marginlist">
+              {p.gains.map((r, i) => (
+                <li key={r.id}>
+                  <button type="button" className="marginlist-headline" onClick={() => onClaim(r.ref)}>
+                    {r.headline}
+                  </button>
+                  <MarginLine row={r} margin={margin} />
+                  <span className="marginlist-meta">
+                    {r.claim_date} · {windows[i].status === 'measured' ? 'measured' : 'not measured'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      {/* ── Transfers ──────────────────────────────────────────── */}
+      {(p.counterparties.length > 0 || p.absorbedFrom.length > 0) && (
+        <section className="company-block" aria-labelledby="co-transfer">
+          <h3 id="co-transfer">Whose revenue line paid</h3>
+          {p.counterparties.length > 0 && (
+            <ul className="transferlist">
+              {p.counterparties.map((c) => (
+                <li key={c.slug ?? c.name}>
+                  {c.slug ? (
+                    <button type="button" className="linklike" onClick={() => onCompany(c.slug!)}>
+                      {c.name}
+                    </button>
+                  ) : (
+                    <span className="is-null">Supplier not established</span>
+                  )}
+                  <span className="transferlist-meta">
+                    {c.rows} {plural(c.rows, 'row')}
+                    {c.amountUsd > 0 ? ` · ${usd(c.amountUsd)} identified` : ' · no amount identified'}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
-          {p.dominantDestination !== null && (
-            <p className="small">{destination(p.dominantDestination).meaning}</p>
-          )}
-        </div>
-
-        <div className="summary-block">
-          <h3>The three conditions</h3>
-          <ConditionFlags state={p.conditions} verbose />
-          <p className="small">
-            {p.conditionsPassed === null
-              ? 'These rows do not agree on all three conditions, or some are uncoded, so no verdict is shown.'
-              : p.conditionsPassed === 3
-                ? 'All three met. This is the combination the hypothesis says is required to keep a gain as profit.'
-                : `${p.conditionsPassed} of 3 met. The hypothesis says this produces operational improvement without a profit effect.`}
-          </p>
-          {p.conditionsPassed !== null && (
-            <Chip
-              small
-              target={{ kind: 'conditionCount', count: p.conditionsPassed }}
-              filters={filters}
-              onChange={onFilters}
-            />
-          )}
-        </div>
-      </section>
-
-      <SimilarCompanies profile={p} allProfiles={allProfiles} max={max} onCompany={onCompany} />
-
-      {(p.counterparties.length > 0 || p.absorbedFrom.length > 0) && (
-        <section className="company-transfers">
-          <h3>Money crossing a company boundary</h3>
-          {p.counterparties.length > 0 && (
-            <div className="transfer-block">
-              <h4>This company's savings came off</h4>
-              <ul>
-                {p.counterparties.map((c) => (
-                  <li key={c.slug ?? 'unnamed'}>
-                    {c.slug ? (
-                      <button type="button" className="linklike" onClick={() => onCompany(c.slug!)}>
-                        {c.name}
-                      </button>
-                    ) : (
-                      <span className="unnamed">{c.name}</span>
-                    )}
-                    <span className="mono small">
-                      {' '}· {c.rows} row{c.rows === 1 ? '' : 's'}
-                      {c.amountUsd > 0 ? ` · ${usd(c.amountUsd)}` : ' · amount not established'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           {p.absorbedFrom.length > 0 && (
-            <div className="transfer-block">
-              <h4>This company absorbed the loss for</h4>
-              <ul>
+            <>
+              <p className="section-lede">Savings claimed by others that land on this company:</p>
+              <ul className="transferlist">
                 {p.absorbedFrom.map((c) => (
                   <li key={c.slug}>
                     <button type="button" className="linklike" onClick={() => onCompany(c.slug)}>
                       {c.name}
                     </button>
-                    <span className="mono small">
-                      {' '}· {c.rows} row{c.rows === 1 ? '' : 's'}
-                      {c.amountUsd > 0 ? ` · ${usd(c.amountUsd)}` : ''}
+                    <span className="transferlist-meta">
+                      {c.rows} {plural(c.rows, 'row')}
                     </span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </>
           )}
         </section>
       )}
 
-      {/* 4. Every row, with counter-evidence sitting beside the claims. */}
-      <section className="company-rows">
-        <div className="section-head">
-          <h3>Every row on this company</h3>
-          <div className="tabs">
-            <Tab on={tab === 'all'} onClick={() => setTab('all')}>All ({p.rows.length})</Tab>
-            <Tab on={tab === 'gains'} onClick={() => setTab('gains')}>Gain claims ({p.gains.length})</Tab>
-            <Tab on={tab === 'counter'} onClick={() => setTab('counter')}>
-              Counter-evidence ({p.counterEvidence.length})
-            </Tab>
-            <Tab on={tab === 'context'} onClick={() => setTab('context')}>Context ({p.context.length})</Tab>
-          </div>
-        </div>
-
-        {rows.length === 0 ? (
-          <p className="small">Nothing of that kind on this company.</p>
-        ) : (
-          <div className="claimlist">
-            {rows.map((r: LedgerRow) => (
-              <ClaimCard key={r.id} row={r} max={max} onCompany={onCompany} />
-            ))}
-          </div>
-        )}
+      {/* ── Every row ──────────────────────────────────────────── */}
+      <section className="company-block" aria-labelledby="co-rows">
+        <h3 id="co-rows">Every row for {p.name}</h3>
+        <GapKey />
+        <ul className="claimlist">
+          {p.rows.map((r) => (
+            <li className="claimrow" key={r.id}>
+              <div className="claimrow-head">
+                <span className="claimrow-date">{shortDate(r.claim_date)}</span>
+                <span className="claimrow-kind">{kind(r.claim_kind).name}</span>
+              </div>
+              <button type="button" className="claimrow-headline" onClick={() => onClaim(r.ref)}>
+                {r.headline}
+              </button>
+              {r.claim_kind === 'gain_claim' && (r.claimed_amount_usd ?? 0) > 0 ? (
+                <GapBar
+                  claimed={r.claimed_amount_usd ?? 0}
+                  traced={r.traceable_to_pl_usd ?? 0}
+                  max={rowMax}
+                />
+              ) : (
+                <p className="claimrow-note is-null">{kind(r.claim_kind).meaning}</p>
+              )}
+            </li>
+          ))}
+        </ul>
       </section>
-    </div>
-  );
-}
-
-/**
- * The connective tissue between one company and the shape of the whole
- * dataset.
- *
- * A reader who has just learned that IBM's gains were absorbed as slack
- * should be one click from the other companies that ended up in the
- * same place, because the repetition is the finding. The reason each
- * company is here is stated rather than implied — the two axes are
- * destination and condition count, and a card that matched on only one
- * of them should say which.
- */
-export function SimilarCompanies({
-  profile, allProfiles, max, onCompany,
-}: {
-  profile: CompanyProfile;
-  allProfiles: CompanyProfile[];
-  max: number;
-  onCompany: (slug: string) => void;
-}) {
-  const similar = useMemo(() => {
-    const slugs = relatedSlugs(profile, allProfiles);
-    return allProfiles
-      .filter((p) => slugs.has(p.slug))
-      .sort((a, b) => b.claimedUsd - a.claimedUsd)
-      .slice(0, 8);
-  }, [profile, allProfiles]);
-
-  if (profile.dominantDestination === null && profile.conditionsPassed === null) {
-    return (
-      <section className="company-similar">
-        <h3>Similar companies</h3>
-        <p className="small">
-          This company has neither a coded destination nor a complete set of conditions, so there
-          is nothing to match it against yet. That is a gap in the coding, not a finding about
-          the company.
-        </p>
-      </section>
-    );
-  }
-
-  if (similar.length === 0) {
-    return (
-      <section className="company-similar">
-        <h3>Similar companies</h3>
-        <p className="small">
-          No other company in the current selection shares this one's destination or condition
-          count. Clearing the filters may widen the comparison.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="company-similar">
-      <div className="section-head">
-        <h3>Similar companies</h3>
-        <p className="small">
-          Others that landed in the same place, or that meet the same number of the three
-          conditions.
-        </p>
-      </div>
-
-      <ul className="similar-list">
-        {similar.map((s) => (
-          <li key={s.slug}>
-            <button type="button" className="similar-name" onClick={() => onCompany(s.slug)}>
-              {s.name}
-            </button>
-            <span className="similar-why">{relationReason(profile, s)}</span>
-            <GapBar claimed={s.claimedUsd} traced={s.tracedUsd} max={max} />
-            <span className="similar-figure mono">
-              {s.claimedUsd > 0 ? usd(s.claimedUsd) : '—'}
-            </span>
-            <Sparkline values={marginSeries(s)} width={54} height={16} />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" className="tab" aria-pressed={on} onClick={onClick}>
-      {children}
-    </button>
+    </article>
   );
 }

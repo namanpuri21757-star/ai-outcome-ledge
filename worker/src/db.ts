@@ -3,37 +3,114 @@ import type { Env } from './types';
 /**
  * A deliberately tiny PostgREST client.
  *
- * ── The fix in this version ────────────────────────────────────────
+ * ── Two things this file exists to prevent ─────────────────────────
  *
- * `select` now paginates. The previous version issued one unbounded
- * request per query and trusted the response to be complete.
+ * **1. Silent truncation.** `select` paginates. PostgREST applies a
+ * server-side row cap and answers a request that exceeds it with HTTP
+ * 200 and a truncated body — no error, no warning, the caller simply
+ * receives fewer rows than exist and has no way to tell. Paginating with
+ * an explicit Range header removes the failure mode, and
+ * `lastPageWasFull` lets a caller assert that it saw everything rather
+ * than assuming it.
  *
- * PostgREST applies a server-side row cap and answers a request that
- * exceeds it with HTTP 200 and a truncated body. There is no error and
- * no warning — the caller simply receives fewer rows than exist and has
- * no way to tell.
+ * **2. Running out of subrequests without leaving a trace.** A Worker
+ * invocation may make a limited number of outbound requests. Exceeding
+ * it does not return an error a job can catch and report: the isolate
+ * stops. That is what killed the outcomes job for its entire history —
+ * it issued one query per company per series, about 180 sequential round
+ * trips, and every outcomes row in `fetch_runs` has a null `finished_at`
+ * as a result. The reason it left no trace is the cruel part: the catch
+ * block's "record the failure" PATCH is itself a subrequest, so it dies
+ * too, and the run looks like it simply wrote nothing.
  *
- * That is almost certainly what emptied the outcomes job. A company with
- * daily price history carries well over a thousand observations, mostly
- * prices; ordered by date ascending, a truncated page ends somewhere in
- * the middle of the series and every recent quarter is missing. Claims
- * dated in the last eighteen months then find no baseline reading, so no
- * outcome row is written, so every margin figure in the interface reads
- * as a dash — with a run that reports success and zero errors.
- *
- * Paginating with an explicit Range header removes the failure mode
- * entirely, and `lastPageWasFull` lets a caller assert that it saw
- * everything rather than assuming it.
+ * `SubrequestBudget` counts every request and stops the job *before* the
+ * ceiling, holding back a small reserve that only the run-recording
+ * writes may spend. A job that asks for too much now fails loudly, with
+ * the number it reached, instead of vanishing.
  */
 
 const PAGE = 1000;
+
+/**
+ * The per-invocation subrequest ceiling. 50 is the documented Workers
+ * free-plan limit and the number every observed failure in `fetch_runs`
+ * is consistent with: fundamentals costs about 26 requests and finished;
+ * prices costs about 21 and finished alone but died when it followed
+ * fundamentals in the same invocation; the old outcomes job wanted 180
+ * and never finished from any starting point.
+ */
+export const DEFAULT_SUBREQUEST_LIMIT = 50;
+
+/** Held back so that recording the failure is always affordable. */
+export const DEFAULT_RESERVE = 4;
+
+export class SubrequestBudgetError extends Error {
+  constructor(readonly spent: number, readonly limit: number, readonly table: string) {
+    super(
+      `Subrequest budget exhausted at ${spent} of ${limit} while reading ${table}. ` +
+        'The job asked for more round trips than one Worker invocation allows. ' +
+        'Split it across invocations or collapse the queries; do not raise this number blindly.',
+    );
+    this.name = 'SubrequestBudgetError';
+  }
+}
+
+/**
+ * One counter shared by every `Db` in a single invocation.
+ *
+ * Jobs construct their own `Db`, so a counter that lived on the client
+ * would reset between them and measure nothing. The budget is passed in
+ * instead, which is also what makes it testable: a test can hand a job a
+ * budget of four and watch it stop.
+ */
+export class SubrequestBudget {
+  spent = 0;
+
+  constructor(
+    readonly limit: number = DEFAULT_SUBREQUEST_LIMIT,
+    readonly reserve: number = DEFAULT_RESERVE,
+  ) {}
+
+  /** Requests a job may still make before the reserve is reached. */
+  get remaining(): number {
+    return Math.max(0, this.limit - this.reserve - this.spent);
+  }
+
+  /**
+   * Claim one request. `reserved` callers may spend into the reserve —
+   * that is only the bookkeeping writes in `recordRun`, which must be
+   * able to file the failure that the exhaustion caused.
+   */
+  take(table: string, reserved = false): void {
+    const ceiling = reserved ? this.limit : this.limit - this.reserve;
+    if (this.spent >= ceiling) throw new SubrequestBudgetError(this.spent, this.limit, table);
+    this.spent += 1;
+  }
+}
 
 export class Db {
   /** Set after each select: true when the final page came back full,
    *  which means the server may still be holding rows back. */
   lastPageWasFull = false;
 
-  constructor(private env: Env) {}
+  readonly budget: SubrequestBudget;
+
+  constructor(
+    private env: Env,
+    budget: SubrequestBudget = new SubrequestBudget(),
+    private privileged = false,
+  ) {
+    this.budget = budget;
+  }
+
+  /**
+   * A second client on the same budget, allowed into the reserve.
+   * Used only for writing to `fetch_runs`: a run that could not be
+   * recorded is a run nobody can diagnose.
+   */
+  reserved(): Db {
+    return new Db(this.env, this.budget, true);
+  }
 
   private get base(): string {
     return this.env.SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1';
@@ -46,6 +123,13 @@ export class Db {
       'Content-Type': 'application/json',
       ...extra,
     };
+  }
+
+  /** Every outbound request in this file goes through here, so the
+   *  budget cannot be bypassed by adding a method. */
+  private async request(table: string, url: string, init: RequestInit): Promise<Response> {
+    this.budget.take(table, this.privileged);
+    return fetch(url, init);
   }
 
   /**
@@ -64,7 +148,7 @@ export class Db {
       const to = from + PAGE - 1;
       const url = `${this.base}/${table}${query ? '?' + query : ''}`;
 
-      const res = await fetch(url, {
+      const res = await this.request(table, url, {
         headers: this.headers({ Range: `${from}-${to}`, 'Range-Unit': 'items' }),
       });
       if (!res.ok && res.status !== 206) {
@@ -87,7 +171,7 @@ export class Db {
     for (let i = 0; i < rows.length; i += chunk) {
       const slice = rows.slice(i, i + chunk);
       const qs = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
-      const res = await fetch(`${this.base}/${table}${qs}`, {
+      const res = await this.request(table, `${this.base}/${table}${qs}`, {
         method: 'POST',
         headers: this.headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
         body: JSON.stringify(slice),
@@ -99,7 +183,7 @@ export class Db {
   }
 
   async insertReturning<T = any>(table: string, row: any): Promise<T> {
-    const res = await fetch(`${this.base}/${table}`, {
+    const res = await this.request(table, `${this.base}/${table}`, {
       method: 'POST',
       headers: this.headers({ Prefer: 'return=representation' }),
       body: JSON.stringify(row),
@@ -110,7 +194,7 @@ export class Db {
   }
 
   async patch(table: string, query: string, patch: any): Promise<void> {
-    const res = await fetch(`${this.base}/${table}?${query}`, {
+    const res = await this.request(table, `${this.base}/${table}?${query}`, {
       method: 'PATCH',
       headers: this.headers({ Prefer: 'return=minimal' }),
       body: JSON.stringify(patch),

@@ -1,121 +1,156 @@
-import { BASES, CONDITION_LIST, DESTINATION_ORDER, KINDS, TIERS, destination, COPY } from '../lib/labels';
-import type { MeasurementBasis, ClaimKind } from '../lib/types';
+import { glossary } from '../lib/labels';
+import {
+  BASELINE_LOOKBACK_DAYS, MARGIN_SERIES, Q1_TOLERANCE_DAYS, Q4_TOLERANCE_DAYS, REVENUE_SERIES,
+} from '../lib/outcome';
 
-/**
- * The coding rules. Written in the same words the interface uses, so a
- * reader can move between this page and a row without translating.
- */
+/* ===================================================================
+   How a row is coded, and how every figure on this site is computed.
+
+   The vocabulary section is generated from `glossary()` in labels.ts, so
+   a term cannot exist in the interface without appearing here, and the
+   words are the same words — there is no second copy to fall out of step.
+   =================================================================== */
+
 export function MethodView() {
+  const sections = glossary();
+
   return (
-    <div className="doc">
-      <h3>What this is</h3>
-      <p>
-        A maintained record of every public claim of an AI gain, coded against what was actually
-        measured. Half of it is typed by hand; half is machine-maintained. The hand half is the
-        coding: what the number is, where the gain landed, whose revenue line paid for it. The
-        machine half is what the company's own filings did afterwards — operating margin, revenue,
-        share price — pulled from SEC XBRL and rebuilt on every run.
-      </p>
+    <article className="doc">
+      <header className="doc-head">
+        <h2>Method</h2>
+        <p className="section-lede">
+          What each coded value means, and exactly how every number on this site is arrived at.
+          Nothing below is typed twice: the definitions are the ones the interface itself uses.
+        </p>
+      </header>
 
-      <h3>What the number is</h3>
-      <p>The single field that decides whether a claim means anything.</p>
-      <dl className="doc-list">
-        {(Object.keys(BASES) as MeasurementBasis[]).map((k) => (
-          <div key={k}>
-            <dt>{BASES[k].name}</dt>
-            <dd>{BASES[k].meaning}</dd>
+      <section aria-labelledby="m-arith">
+        <h3 id="m-arith">How the money figures are computed</h3>
+        <ul className="doc-list">
+          <li>
+            <strong>Only gain claims enter a money total.</strong> A market capitalisation, an
+            acquisition price and a cost saving are different objects. Counter-evidence, context,
+            pricing and research rows are recorded in full and excluded from every sum.
+          </li>
+          <li>
+            <strong>The denominator is claims that named dollars.</strong> A claim stated as “opex
+            down 33%” contributes nothing to a dollar total, so dollars traced against it cannot
+            count toward the traceable share either. Those are reported separately and always shown
+            when non-zero, rather than folded in or dropped.
+          </li>
+          <li>
+            <strong>Traceable is not clamped.</strong> If a row is coded with more traceable than
+            claimed, the interface says so on that row. That is a defect in the research to fix, not
+            an arithmetic edge to hide.
+          </li>
+          <li>
+            <strong>Nulls are a real state.</strong> A missing figure is not zero and not the
+            smallest value. It sorts last in both directions and is written out in words rather than
+            rendered as a dash.
+          </li>
+          <li>
+            <strong>One function adds up.</strong> Every total on every screen is a field returned
+            by one function over one set of rows, so two figures for one quantity cannot appear.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="m-margin">
+        <h3 id="m-margin">How the filing figures are derived</h3>
+        <ul className="doc-list">
+          <li>
+            Quarterly <code>{MARGIN_SERIES}</code> and <code>{REVENUE_SERIES}</code> values are
+            collected from SEC XBRL company facts by a scheduled Cloudflare Worker. Nothing on this
+            site is typed by hand into those series.
+          </li>
+          <li>
+            The baseline is the last operating margin filed at or before the claim date, provided it
+            is no more than {BASELINE_LOOKBACK_DAYS} days earlier. Quarterly filings arrive months
+            after the period they describe, so a shorter window rejects claims the data can answer.
+          </li>
+          <li>
+            The one-quarter reading is the filed quarter nearest to 91 days after the claim, within{' '}
+            {Q1_TOLERANCE_DAYS} days. The one-year reading is nearest to 365 days after, within{' '}
+            {Q4_TOLERANCE_DAYS} days. A reading further off than that is a different quarter, not a
+            data point.
+          </li>
+          <li>
+            <strong>A margin that moved is not evidence.</strong> Operating margin moves for pricing,
+            mix, headcount and one-off charges at once. No part of any movement shown here has been
+            attributed to AI, and the interface says so beside every figure.
+          </li>
+          <li>
+            Where a claim cannot be measured, the reason is stated on the row and names the dates
+            involved — whether the company files at all, whether a series exists, and how far it
+            reaches.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="m-prices">
+        <h3 id="m-prices">What is not collected</h3>
+        <ul className="doc-list">
+          <li>
+            Share prices are not collected. The free source used until August 2026 began serving a
+            proof-of-work interstitial to automated clients instead of data. Solving it would be
+            working around a site declining access, so the job is kept and switched off until a
+            different source is chosen. No price figure appears anywhere on this site.
+          </li>
+          <li>
+            Three companies in the ledger do not file with the SEC at all. No margin series is
+            possible for them, and that is stated on their rows as a fact about the company rather
+            than reported as a fault.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="m-vocab">
+        <h3 id="m-vocab">The vocabulary</h3>
+        <p className="section-lede">
+          Every coded value in the ledger, with the definition the interface shows when a reader
+          opens it in place. Stored codes are in the right-hand column and in the CSV export.
+        </p>
+
+        {sections.map((s) => (
+          <div className="glossary" key={s.heading}>
+            <h4>{s.heading}</h4>
+            <dl>
+              {s.items.map((item) => (
+                <div key={item.code}>
+                  <dt>
+                    {item.label}
+                    <span className="glossary-code mono">{item.code}</span>
+                  </dt>
+                  <dd>
+                    {item.body}
+                    {item.extra?.map((line) => (
+                      <span className="glossary-extra" key={line}>{line}</span>
+                    ))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
         ))}
-      </dl>
+      </section>
 
-      <h3>Where the gain landed</h3>
-      <p>
-        Five destinations, ordered by how far the gain ended up from profit. Only the last one is
-        profit. The ordering is real information, so the interface shows it as position on a ladder
-        rather than as a number printed in front of a word — a leading "5" reads as a quantity, and
-        it is a rank.
-      </p>
-      <dl className="doc-list">
-        {DESTINATION_ORDER.filter((r) => r > 0).map((r) => (
-          <div key={r}>
-            <dt>
-              {destination(r).name} <span className="small is-null">step {r} of 5</span>
-            </dt>
-            <dd>{destination(r).meaning}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <h3>The three conditions</h3>
-      <p>
-        The claim under test: meeting two of these three produces measurable operational improvement
-        and no effect on profit. Meeting all three is what the rare high performers have.
-      </p>
-      <dl className="doc-list">
-        {CONDITION_LIST.map((c) => (
-          <div key={c.key}>
-            <dt>{c.name}</dt>
-            <dd>
-              {c.question} <strong>Met:</strong> {c.passes} <strong>Not met:</strong> {c.fails}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
-      <h3>Traceable, and not traceable</h3>
-      <p>
-        A claim's <em>traceable</em> amount starts at zero and only moves when a named line item in a
-        financial statement can be pointed at. That is why almost every reconciliation bar is mostly
-        hatched.
-      </p>
-      <p>
-        <strong>{COPY.untraced} does not mean the claim is false.</strong> {COPY.untracedMeaning}
-      </p>
-
-      <h3>Kinds of row</h3>
-      <p>
-        Not every row asserts that AI produced a gain. A market-capitalisation figure, an acquisition
-        price, and a $60M savings claim are different objects, and summing them would make the
-        headline number meaningless. Only gain claims enter the money totals.
-      </p>
-      <dl className="doc-list">
-        {(Object.keys(KINDS) as ClaimKind[]).map((k) => (
-          <div key={k}>
-            <dt>{KINDS[k].name}</dt>
-            <dd>{KINDS[k].meaning}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <h3>How much to trust a row</h3>
-      <dl className="doc-list">
-        {[1, 2, 3].map((t) => (
-          <div key={t}>
-            <dt>{t === 1 ? 'Primary' : t === 2 ? 'Self-reported' : 'Press'}</dt>
-            <dd>{TIERS[t]}</dd>
-          </div>
-        ))}
-      </dl>
-      <p>
-        A source that sells the thing its number validates is marked <em>sells the thing</em>. It is
-        a disclosure, not a dismissal: several of the best-documented deployments in the ledger come
-        from vendors.
-      </p>
-
-      <h3>Where a source link is missing</h3>
-      <p>
-        Most rows deliberately carry no stored URL. A link written from memory is worse than none,
-        because it looks verified. Those rows carry the exact next step to check them instead, and
-        the app turns it into a one-click EDGAR or Scholar search.
-      </p>
-
-      <h3>What is generated, and what is typed</h3>
-      <p>
-        Every sentence on the findings page and every company verdict is assembled from the rows at
-        render time. None of it is typed prose about the data, so recoding a row or a fresh collector
-        run changes the answer rather than leaving a stale paragraph behind. When a query returns
-        nothing, the page says so rather than falling back to copy describing data that is not there.
-      </p>
-    </div>
+      <section aria-labelledby="m-limits">
+        <h3 id="m-limits">What this cannot tell you</h3>
+        <ul className="doc-list">
+          <li>
+            Whether a claim is true. “Not traceable to a filing line” measures locatability, not
+            honesty. Several of these claims are audited and true.
+          </li>
+          <li>
+            Whether AI caused anything. Every figure here is an association in time between a stated
+            claim and a disclosed number.
+          </li>
+          <li>
+            What is not in the ledger. This is a hand-built record of public claims, not a survey.
+            Absence from it is not evidence of anything.
+          </li>
+        </ul>
+      </section>
+    </article>
   );
 }

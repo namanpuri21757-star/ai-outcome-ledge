@@ -1,3 +1,11 @@
+/* ===================================================================
+   The shapes the database actually returns.
+
+   Column names are `v_ledger`'s verbatim. Nothing is renamed on the way
+   in, so a field on screen can be found in the schema by searching for
+   the same string.
+   =================================================================== */
+
 export type MeasurementBasis =
   | 'gross_capacity'
   | 'net_pl'
@@ -10,12 +18,7 @@ export type MeasurementBasis =
 
 export type EpistemicTag = 'fact' | 'strong' | 'inference' | 'speculation' | 'unknown';
 
-export type ClaimKind =
-  | 'gain_claim'
-  | 'counter_evidence'
-  | 'context'
-  | 'pricing'
-  | 'research_finding';
+export type ClaimKind = 'gain_claim' | 'counter_evidence' | 'context' | 'pricing' | 'research_finding';
 
 export type VerificationStatus =
   | 'verified_primary'
@@ -23,7 +26,6 @@ export type VerificationStatus =
   | 'needs_primary_source'
   | 'disputed';
 
-/** One row of v_ledger. Column names are the view's, verbatim. */
 export interface LedgerRow {
   id: string;
   ref: string;
@@ -76,13 +78,23 @@ export interface LedgerRow {
   price_delta_4q: number | null;
 }
 
+/** One reading of one series. Written only by the collector. */
 export interface Observation {
   company_id: string;
   series_key: string;
   observed_at: string;
   value: number;
-  unit: string;
-  fiscal_period: string | null;
+}
+
+/**
+ * `v_ledger` carries the company slug but not its id, and `observations`
+ * carries the id but not the slug. This is the join.
+ */
+export interface CompanyRef {
+  id: string;
+  slug: string;
+  cik: string | null;
+  is_public: boolean;
 }
 
 export interface FetchRun {
@@ -94,8 +106,14 @@ export interface FetchRun {
   ok: boolean | null;
   companies_attempted: number;
   rows_written: number;
-  /** `expected` marks a permanent fact about a company — a non-SEC filer
-   *  with no possible margin series — rather than a fault in the run. */
   errors: Array<{ scope: string; message: string; expected?: boolean }>;
   notes: string | null;
+}
+
+/** Everything the app loads at startup, in one object. */
+export interface Dataset {
+  rows: LedgerRow[];
+  companies: CompanyRef[];
+  /** Keyed by company slug, then by series key, date-ascending. */
+  series: Map<string, Map<string, Array<{ date: string; value: number }>>>;
 }

@@ -1,215 +1,153 @@
 import { describe, expect, it } from 'vitest';
 import {
-  HOME, MAX_PINNED, companyRoute, parseHash, toHash, togglePinned, type Route,
+  claimRoute, companyRoute, FILTERED_VIEW, HOME, ledgerRoute, parseFilters, parseHash,
+  serializeFilters, toHash,
 } from '../src/lib/route';
 import { EMPTY_FILTERS, type Filters } from '../src/lib/filters';
 
-/** A route with the boring parts filled in, so each test states only
- *  what it is about. */
-const route = (patch: Partial<Route> = {}): Route => ({
-  view: 'flow',
-  id: null,
-  context: null,
-  filters: EMPTY_FILTERS,
-  pinned: [],
-  focus: null,
-  ...patch,
-});
-
-const filters = (patch: Partial<Filters> = {}): Filters => ({ ...EMPTY_FILTERS, ...patch });
+const f = (patch: Partial<Filters> = {}): Filters => ({ ...EMPTY_FILTERS, ...patch });
 
 describe('parseHash', () => {
-  it('treats an empty hash as the flow home', () => {
+  it('lands on the ledger for an empty hash', () => {
     expect(parseHash('')).toEqual(HOME);
     expect(parseHash('#')).toEqual(HOME);
     expect(parseHash('#/')).toEqual(HOME);
   });
 
-  it('parses a plain view', () => {
-    expect(parseHash('#/ledger')).toEqual(route({ view: 'ledger' }));
+  it('lands on the ledger for a view that no longer exists', () => {
+    // Every deleted view, by its old name. None may resolve.
+    for (const dead of ['flow', 'patterns', 'companies', 'destinations', 'conditions',
+                        'transfers', 'queue', 'submit', 'finding', 'findings']) {
+      expect(parseHash(`#/${dead}`).view, dead).toBe('ledger');
+    }
   });
 
-  it('parses the new pattern grid', () => {
-    expect(parseHash('#/patterns').view).toBe('patterns');
+  it('reads a claim by its reference', () => {
+    const r = parseHash('#/claim/ibm-productivity-3-5b-2024');
+    expect(r.view).toBe('claim');
+    expect(r.id).toBe('ibm-productivity-3-5b-2024');
   });
 
-  it('parses a company slug', () => {
-    expect(parseHash('#/company/ibm')).toEqual(route({ view: 'company', id: 'ibm' }));
+  it('reads a company by its slug', () => {
+    expect(parseHash('#/company/wtw')).toMatchObject({ view: 'company', id: 'wtw' });
   });
 
-  it('carries the context that says where the reader came from', () => {
-    expect(parseHash('#/company/ibm?from=absorbed%20as%20slack')).toEqual(
-      route({ view: 'company', id: 'ibm', context: 'absorbed as slack' }),
-    );
+  it('sends a drill-down with no identifier home rather than rendering nothing', () => {
+    expect(parseHash('#/company').view).toBe('ledger');
+    expect(parseHash('#/claim').view).toBe('ledger');
   });
 
-  it('decodes a slug containing a hyphen or encoded characters', () => {
-    expect(parseHash('#/company/mass-general-brigham').id).toBe('mass-general-brigham');
-    expect(parseHash('#/company/current%2Dcrete').id).toBe('current-crete');
+  it('decodes an identifier that was encoded, slash and all', () => {
+    expect(parseHash('#/company/' + encodeURIComponent('a b/c')).id).toBe('a b/c');
   });
 
-  it('sends an unknown view home rather than rendering nothing', () => {
-    expect(parseHash('#/nonsense')).toEqual(HOME);
-  });
-
-  it('sends a company route with no slug to the index rather than an empty page', () => {
-    expect(parseHash('#/company')).toEqual(route({ view: 'companies' }));
-  });
-
-  it('ignores an id on a view that does not take one', () => {
-    expect(parseHash('#/ledger/ibm').id).toBeNull();
-  });
-
-  it('lands the retired findings link on the flow page that absorbed it', () => {
-    expect(parseHash('#/findings').view).toBe('flow');
-  });
-
-  it('keeps the findings drill-down working', () => {
-    expect(parseHash('#/finding/who-converted')).toEqual(
-      route({ view: 'finding', id: 'who-converted' }),
-    );
+  it('reads the ledger when the hash is only a query — the shape of a shared link', () => {
+    const r = parseHash('#/?dest=5');
+    expect(r.view).toBe('ledger');
+    expect(r.filters.destinations).toEqual([5]);
   });
 });
 
-describe('the selection travels in the URL', () => {
-  it('reads destinations, bases and companies', () => {
-    const r = parseHash('#/patterns?dest=1,5&basis=net_pl,gross_capacity&co=ibm,klarna');
-    expect(r.filters.destinations).toEqual([1, 5]);
-    expect(r.filters.bases).toEqual(['net_pl', 'gross_capacity']);
-    expect(r.filters.companies).toEqual(['ibm', 'klarna']);
+describe('filter scope is enforced by the router', () => {
+  it('reads filters on the ledger', () => {
+    const r = parseHash('#/?dest=5&kind=gain_claim&q=klarna');
+    expect(r.filters.destinations).toEqual([5]);
+    expect(r.filters.kinds).toEqual(['gain_claim']);
+    expect(r.filters.search).toBe('klarna');
   });
 
-  it('reads the boolean narrowings', () => {
-    const r = parseHash('#/ledger?cp=1&conflict=1&unverified=1&dollars=1');
-    expect(r.filters.counterpartyOnly).toBe(true);
-    expect(r.filters.conflictOnly).toBe(true);
-    expect(r.filters.unverifiedOnly).toBe(true);
-    expect(r.filters.dollarsOnly).toBe(true);
+  it('refuses to read filters on a claim page, even when the URL carries them', () => {
+    const r = parseHash('#/claim/some-ref?dest=5&q=klarna&dollars=1');
+    expect(r.filters).toEqual(EMPTY_FILTERS);
   });
 
-  it('leaves booleans off when absent rather than guessing', () => {
-    expect(parseHash('#/ledger').filters.counterpartyOnly).toBe(false);
+  it('refuses to read filters on a company page — the defect that showed two scopes at once', () => {
+    const r = parseHash('#/company/ibm?dest=1&kind=gain_claim');
+    expect(r.filters).toEqual(EMPTY_FILTERS);
   });
 
-  it('keeps the date window clear of the breadcrumb, which also uses "from"', () => {
-    const r = parseHash('#/ledger?after=2025-01-01&before=2025-12-31&from=who%20paid');
-    expect(r.filters.from).toBe('2025-01-01');
-    expect(r.filters.to).toBe('2025-12-31');
-    expect(r.context).toBe('who paid');
+  it('refuses to read filters on method and maintenance', () => {
+    expect(parseHash('#/method?dest=5').filters).toEqual(EMPTY_FILTERS);
+    expect(parseHash('#/maintenance?dest=5').filters).toEqual(EMPTY_FILTERS);
   });
 
-  it('reads a search term with spaces', () => {
-    expect(parseHash('#/ledger?q=customer+service').filters.search).toBe('customer service');
+  it('refuses to write filters anywhere but the ledger', () => {
+    const dirty = f({ destinations: [5], search: 'x' });
+    expect(toHash({ view: 'company', id: 'ibm', filters: dirty })).toBe('#/company/ibm');
+    expect(toHash({ view: 'claim', id: 'r', filters: dirty })).toBe('#/claim/r');
+    expect(toHash({ view: 'method', id: null, filters: dirty })).toBe('#/method');
   });
 
-  it('discards non-numeric ranks rather than producing NaN', () => {
-    expect(parseHash('#/patterns?dest=1,abc,5').filters.destinations).toEqual([1, 5]);
+  it('names the one view that owns the selection', () => {
+    expect(FILTERED_VIEW).toBe('ledger');
   });
 
-  it('ignores empty entries from a trailing comma', () => {
-    expect(parseHash('#/patterns?co=ibm,,').filters.companies).toEqual(['ibm']);
+  it('drops the filter when a drill-down route is built', () => {
+    expect(companyRoute('ibm').filters).toEqual(EMPTY_FILTERS);
+    expect(claimRoute('ref-1').filters).toEqual(EMPTY_FILTERS);
   });
 });
 
 describe('toHash', () => {
-  it('round-trips a company route with context', () => {
-    const r = companyRoute('ibm', 'kept as margin', EMPTY_FILTERS, []);
-    expect(parseHash(toHash(r))).toEqual(r);
+  it('keeps a clean ledger URL clean', () => {
+    expect(toHash(HOME)).toBe('#/');
+    expect(toHash(ledgerRoute(EMPTY_FILTERS))).toBe('#/');
   });
 
-  it('round-trips every simple view', () => {
-    for (const view of ['flow', 'patterns', 'companies', 'ledger', 'method', 'transfers'] as const) {
-      expect(parseHash(toHash(route({ view }))).view).toBe(view);
-    }
+  it('writes only non-default values', () => {
+    expect(toHash(ledgerRoute(f({ dollarsOnly: true })))).toBe('#/?dollars=1');
+    expect(toHash(ledgerRoute(f({ search: '  spaced  ' })))).toBe('#/?q=spaced');
   });
 
-  it('encodes a context containing spaces and punctuation', () => {
-    const h = toHash(companyRoute('ibm', 'who paid, and why?', EMPTY_FILTERS, []));
-    expect(h).not.toMatch(/ /);
-    expect(parseHash(h).context).toBe('who paid, and why?');
-  });
-
-  it('omits the query string entirely when nothing is selected', () => {
-    expect(toHash(companyRoute('ibm', null, EMPTY_FILTERS, []))).toBe('#/company/ibm');
-  });
-
-  it('writes only what differs from the default, so a clean URL stays clean', () => {
-    expect(toHash(route({ view: 'patterns', filters: filters({ destinations: [5] }) })))
-      .toBe('#/patterns?dest=5');
-  });
-
-  it('round-trips a full selection', () => {
-    const r = route({
-      view: 'patterns',
-      filters: filters({
-        search: 'customer service',
-        destinations: [1, 5],
-        bases: ['net_pl'],
-        companies: ['ibm'],
-        groups: ['D'],
-        tiers: [1, 2],
-        counterpartyOnly: true,
-        dollarsOnly: true,
-        from: '2025-01-01',
-        to: '2025-12-31',
-      }),
-      pinned: ['ibm', 'klarna'],
+  it('round-trips every filter dimension', () => {
+    const full = f({
+      search: 'klarna savings',
+      kinds: ['gain_claim', 'context'],
+      bases: ['net_pl'],
+      destinations: [1, 5],
+      verification: ['disputed'],
+      groups: ['D', 'F'],
+      companies: ['ibm', 'wtw'],
+      dollarsOnly: true,
     });
-    expect(parseHash(toHash(r))).toEqual(r);
+    expect(parseHash(toHash(ledgerRoute(full))).filters).toEqual(full);
   });
 
-  it('carries pinned companies so a comparison is shareable', () => {
-    const h = toHash(route({ pinned: ['ibm', 'klarna'] }));
-    expect(h).toContain('pin=ibm%2Cklarna');
-    expect(parseHash(h).pinned).toEqual(['ibm', 'klarna']);
-  });
-
-  it('never emits more pins than the tray can hold', () => {
-    const r = route({ pinned: ['a', 'b', 'c', 'd', 'e', 'f'] });
-    expect(parseHash(toHash(r)).pinned).toHaveLength(MAX_PINNED);
+  it('encodes an identifier containing a slash', () => {
+    expect(toHash(claimRoute('a/b'))).toBe('#/claim/a%2Fb');
+    expect(parseHash(toHash(claimRoute('a/b'))).id).toBe('a/b');
   });
 });
 
-describe('togglePinned', () => {
-  it('adds and removes', () => {
-    expect(togglePinned([], 'ibm')).toEqual(['ibm']);
-    expect(togglePinned(['ibm'], 'ibm')).toEqual([]);
+describe('parseFilters', () => {
+  it('drops a non-numeric destination rather than producing NaN', () => {
+    expect(parseFilters(new URLSearchParams('dest=5,abc,1')).destinations).toEqual([5, 1]);
   });
 
-  it('stops at the cap instead of silently dropping the oldest', () => {
-    const full = ['a', 'b', 'c', 'd'];
-    expect(togglePinned(full, 'e')).toEqual(full);
+  it('ignores empty values in a list', () => {
+    expect(parseFilters(new URLSearchParams('kind=,,gain_claim,')).kinds).toEqual(['gain_claim']);
   });
 
-  it('still un-pins when full, so the tray is never stuck', () => {
-    expect(togglePinned(['a', 'b', 'c', 'd'], 'c')).toEqual(['a', 'b', 'd']);
+  it('treats an empty search parameter as no search', () => {
+    expect(parseFilters(new URLSearchParams('q=')).search).toBe('');
+  });
+
+  it('reads dollars only when it is exactly 1', () => {
+    expect(parseFilters(new URLSearchParams('dollars=1')).dollarsOnly).toBe(true);
+    expect(parseFilters(new URLSearchParams('dollars=true')).dollarsOnly).toBe(false);
   });
 });
 
-describe('focus — the held node is part of the link', () => {
-  it('round-trips through the hash', () => {
-    expect(parseHash('#/flow?focus=co%3Aibm').focus).toBe('co:ibm');
-    expect(toHash(route({ focus: 'co:ibm' }))).toContain('focus=co%3Aibm');
+describe('serializeFilters', () => {
+  it('writes nothing for a clean selection', () => {
+    const q = new URLSearchParams();
+    serializeFilters(EMPTY_FILTERS, q);
+    expect(q.toString()).toBe('');
   });
 
-  it('is absent from a clean URL', () => {
-    expect(toHash(route())).toBe('#/flow');
-    expect(parseHash('#/flow').focus).toBeNull();
-  });
-
-  it('survives alongside a selection', () => {
-    const parsed = parseHash('#/flow?dest=1&focus=dest%3A1');
-    expect(parsed.focus).toBe('dest:1');
-    expect(parsed.filters.destinations).toEqual([1]);
-  });
-
-  it('is not carried onto views that cannot show a diagram', () => {
-    // A dead parameter on every company link is litter.
-    expect(toHash(route({ view: 'ledger', focus: 'co:ibm' }))).not.toContain('focus');
-    expect(companyRoute('ibm', null, EMPTY_FILTERS, []).focus).toBeNull();
-  });
-
-  it('treats an empty focus as no focus', () => {
-    expect(parseHash('#/flow?focus=').focus).toBeNull();
+  it('trims the search before writing it', () => {
+    const q = new URLSearchParams();
+    serializeFilters(f({ search: '  x  ' }), q);
+    expect(q.get('q')).toBe('x');
   });
 });

@@ -1,139 +1,253 @@
 # AI Outcome Ledger
 
-A maintained public record of every public claim of an AI productivity gain, coded against what was actually measured, what happened to the claimant's margin afterwards, and whose revenue line paid for it.
+A maintained record of every public claim of an AI gain, coded against what was
+actually measured.
 
-Not a report. Half of it is typed by hand and half rebuilds itself on a schedule from SEC filings, which is what makes it a record rather than a snapshot.
+**The headline result: of $8.393B in AI gains claimed in dollars, $428.0M —
+5.1% — can be matched to a named line item in a financial statement.**
 
-**→ [SETUP.md](SETUP.md) to deploy it.** Written from absolute zero: it installs the tools, creates the accounts, and offers a path that needs no Git or GitHub at all. About an hour, $0, no credit card.
+That is not an accusation. Several of these claims are audited and true. The
+ledger measures the distance between a number being *real* and a number being
+*locatable*, and codes where each gain went instead: absorbed as slack, kept as
+quality, taken from a supplier, passed to customers, or kept as margin.
 
----
-
-## The problem it exists for
-
-Everyone reports AI use-case gains. Almost nobody can point to the line item. The gap is usually treated as a mystery or as evidence that AI does not work. It is neither — it is that the gain lands in one of five places and only one of them is margin.
-
-The claims are mostly true. They are just not the quantity people think they are:
-
-- **IBM** reports $3.5B in productivity savings against a $2B target. That is hours freed, valued at loaded cost, redeployed rather than removed. Headcount went up. It is not a cost reduction, and IBM says so.
-- **Klarna** told analysts the AI agent had saved $60M. In the same quarter, customer service and operations cost $50M, up from $42M a year earlier. The saving was real and was consumed by volume growth and quality remediation before it reached the P&L.
-- **JPMorgan** runs the best-resourced AI programme in global finance. Dimon: roughly $2B of benefit against $2B of expense. Break-even.
-- **Verizon** posted its highest-ever adjusted EBITDA margin and credited AI, churn improvement, lower acquisition spend, and a 27% drop in upgrade volumes in the same breath. How much was AI is not knowable, including by Verizon.
-
-Four cases, four different reasons the number does not mean what it appears to mean. There are hundreds. This is the table that holds them.
+84 rows across 45 companies and research populations. Half hand-coded, half
+collected from SEC filings by a scheduled worker.
 
 ---
 
-## What it currently contains
-
-**84 coded claims across 45 entities**, seeded and verified.
-
-| Row kind | Count | What it is |
-|---|---:|---|
-| `gain_claim` | 32 | A firm claiming a gain |
-| `counter_evidence` | 16 | Something that moved the other way |
-| `context` | 15 | Relevant, not a savings claim |
-| `research_finding` | 15 | Study or population-level result |
-| `pricing` | 6 | Pricing-model evidence |
-
-**The headline: $8.39B in dollar-denominated gain claims. $0.45B tied to a disclosed line. About 5% reconciled.**
-
-Where the gains landed, gain claims only:
-
-| Destination | Claims | Claimed | Unreconciled |
-|---|---:|---:|---:|
-| 1 · Worker slack | 10 | $4.15B | $4.15B |
-| 2 · Quality | 5 | — | — |
-| 5 · Margin | 15 | $3.58B | $3.13B |
-| 0 · Uncoded | 2 | $0.67B | $0.67B |
-
-Destinations 3 (counterparty) and 4 (price) hold almost no gain claims — firms do not announce "we moved this cost onto our supplier" as an achievement. That evidence arrives as counter-evidence instead: a BPO's guidance cut, a vendor's repricing. **The asymmetry in what gets announced is itself a finding**, and it is why counter-evidence sits in the same table rather than an appendix.
-
-Evidence quality is on the face of every row: 34 verified against a primary source, 17 in the verification queue with the exact next step attached, 2 disputed.
-
----
-
-## The five destinations
-
-Only the fifth is margin.
-
-1. **Worker slack** — absorbed into the working day. Nothing changes financially.
-2. **Quality** — converted to quality, safety or wellbeing. Real gain, no financial trace. Ambient clinical scribes are the purest case: large, well-measured, and it lands entirely in clinician burnout because the appointment book, not documentation speed, sets the schedule.
-3. **Counterparty** — taken off a supplier's revenue line. A transfer, not a productivity gain; it nets to roughly zero in aggregate.
-4. **Price** — passed to the customer. Captured by the buyer of AI, not the seller.
-5. **Margin** — retained. Requires all three conditions at once: the billing unit survives the automation, there is a demand sink for the freed capacity, and there is permission to act on it.
-
----
-
-## Views
-
-**Reconciliation** — every dollar claim on one shared scale. Solid green is the portion tied to a disclosed line; hatched red is the rest. The shape of the page is the argument.
-
-**Ledger** — the full record, sortable, each row expanding to its coding, its source, its verification state and its margin series with the claim date marked.
-
-**Destinations** — five columns. Watching the first four fill is the fastest way to see why use-case gains and EBIT impact are different questions.
-
-**Transfers** — a bipartite map of who claims the saving against who absorbs the loss, edge weight by identified amount. If a thesis depends on a firm converting AI capacity into margin, this is the map of whose revenue line it comes from.
-
-**Conditions** — the 2×2×2, populated with live margin movement from filings. This is the view most likely to overturn the framing, and it is built that way deliberately: if firms passing all three conditions show no better trajectory than firms passing two, the app will say so before any narrative does.
-
-**Verification** — what still needs a primary source, each with its next step turned into a one-click EDGAR full-text or Scholar query.
-
-**Add a claim** — public inlet. Submissions land in a separate table nobody but you can read, and promotion stays manual because the coding is the value.
-
-**Method** — the coding rules, in the app, because a taxonomy nobody can see gets applied inconsistently within a month.
-
-All eight share one filter object. Filtering the transfer map and switching to the ledger shows the same subset — that continuity is the difference between a tool for finding connections and eight separate charts.
-
----
-
-## Architecture
+## What is in the repository
 
 ```
-supabase/     Postgres schema, RLS policies, seed data (4 files, run in order)
-worker/       Cloudflare Worker: scheduled SEC XBRL + Stooq collector
-web/          React + Vite frontend for Cloudflare Pages
-docs/         Methodology and data dictionary
+web/            Vite + React 19 + TypeScript frontend
+  src/lib/      pure logic — every aggregate, filter, route and generated sentence
+  src/views/    the five surfaces
+  test/         321 tests, no browser required
+  shots/        screenshot capture and the scripted click-through
+worker/         Cloudflare Worker: SEC XBRL, Stooq, and derived claim outcomes
+  test/         128 tests, never touches the network
+  smoke/        the one live check, run on demand
+supabase/       schema, row-level security, and seed data — run in the SQL editor
+docs/           data dictionary, methodology, and before/after screenshots
+REBUILD.md      the 2026-08-15 architecture decision record
+CLAUDE.md       the invariants. Read this before changing anything
 ```
 
-**Data sources are keyless and free.** SEC EDGAR company facts for quarterly fundamentals, Stooq for daily closes. No API keys, no paid tier, no vendor dependency for the half of the dataset that has to stay honest.
+The five surfaces:
 
-**Why a collector at all:** "what happened to margin afterwards" is the column most likely to rot if typed by hand, and the one that does the most work. Machine-maintaining it means it cannot quietly go stale while the rest of the table looks current.
-
-Three things in the collector matter for trusting the numbers:
-
-- **Year-to-date tagging is converted to discrete quarters.** Many filers tag cumulatively; reading Q3 YTD as a quarterly figure overstates it roughly threefold. Q4 is derived as full year minus three quarters, and where a sequence has an ambiguous gap the collector refuses to derive rather than guessing.
-- **Amended filings are deduplicated**, latest accession wins.
-- **Baselines join strictly on period end**, ±50 days for the quarter and ±70 for the year. A claim outside every window gets no outcome rather than a nearest-neighbour approximation.
-
-CIKs are resolved at runtime from the SEC's own ticker map rather than hardcoded, because a wrong CIK does not error — it silently returns another company's financials.
+| Route | What it is for |
+|---|---|
+| `#/` | The finding, where the claimed dollars went instead, what the rows say, and every row |
+| `#/claim/<ref>` | One claim, fully unpacked: coding, conditions, what the filings show, the source |
+| `#/company/<slug>` | One company's whole record, with a generated verdict |
+| `#/method` | How a row is coded and how every figure is computed |
+| `#/maintenance` | Collector health, the checking queue, the submission inbox |
 
 ---
 
-## Testing
+## Local setup
 
-| Suite | Tests | Command |
-|---|---:|---|
-| Worker | 74 | `cd worker && npx vitest run` |
-| Web | 51 | `cd web && npx vitest run` |
+Node 20 or newer.
 
-Both typecheck clean (`npx tsc --noEmit`). The production build succeeds; the chart library is split into its own chunk so the ledger paints before recharts loads.
+```bash
+git clone <this repo>
+cd ai-outcome-ledger
+```
 
-The four SQL files were executed against a real Postgres 16 instance from a clean schema, in order, and are idempotent — safe to re-run from the top. Verified: 84 claims load, all three views return correct aggregates, and `claim_outcomes` joins through to both `v_ledger` and `v_condition_cells`.
+### The database
 
-The collector's network calls could not be exercised from the build environment, so the SEC and Stooq paths are covered by unit tests against captured response shapes rather than live fetches. First real run is step 2.6 of SETUP.md, and `fetch_runs` records exactly what happened.
+Run the four files in `supabase/` **in order**, in the Supabase SQL editor:
+
+```
+01_schema.sql        tables, views, controlled vocabularies
+02_policies.sql      row-level security
+03_seed_companies.sql
+04_seed_claims.sql
+```
+
+`01` and `02` are safe to re-run.
+
+### The frontend
+
+```bash
+cd web
+cp .env.example .env.local     # then paste the project URL and the anon key
+npm install
+npm run dev                    # http://localhost:5173
+```
+
+Both variables are **build-time**. Vite bakes them into the bundle, so changing
+one needs a rebuild, not a restart — and a build made without them *succeeds*,
+producing a site that renders its own chrome and asks a hostname that does not
+exist for its data. Before deploying, check:
+
+```bash
+grep -o 'https://[a-z0-9-]*\.supabase\.co' dist/assets/*.js | sort -u
+```
+
+The anon key is safe in the browser: RLS limits it to reading published rows and
+inserting a submission. **Never put the service-role key in `web/`.**
+
+### Without a database
+
+```bash
+cd web
+VITE_FIXTURES=1 npm run dev
+```
+
+45 invented companies with clearly synthetic names and figures. The fixtures are
+behind `import.meta.env.DEV` *and* an explicit flag, so production builds drop
+the module entirely. They deliberately include the awkward shapes the real corpus
+has: gain claims with no dollar figure, a traced figure on a claim that named no
+dollars, filers with no readable series, and claims too recent to have a reading
+a year later.
+
+### The collector
+
+```bash
+cd worker
+cp .dev.vars.example .dev.vars   # service-role key, SEC user agent, run token
+npm install
+npm run dev                      # wrangler dev, with --test-scheduled
+```
+
+`SEC_USER_AGENT` must be a descriptive string with a contact email or the SEC
+returns 403.
 
 ---
 
-## Two things worth your judgement, not mine
+## Running the collectors
 
-**The Amazon and CBA rows are coded from press aggregation.** I declined to carry a headcount figure into the Amazon row at all; its `verify_hint` says to take it from the 8-K. Both are in the verification queue.
+Three jobs, each reachable on demand and each with its own cron trigger:
 
-**The Long Lake / Amex GBT row is the highest-value single verification in the set.** Post-close segment disclosure would be the first independently auditable AI-retrofit margin data that exists. Every operating figure in that group is currently self-reported by private companies with active fundraising, including a $100M unaudited EBITDA claim. The moment that entity carries public disclosure obligations, an entire group in this dataset becomes verifiable for the first time.
+```bash
+curl "$WORKER_URL/run?job=fundamentals&token=$RUN_TOKEN"   # SEC XBRL quarterly series
+curl "$WORKER_URL/run?job=outcomes&token=$RUN_TOKEN"       # derived claim outcomes
+curl "$WORKER_URL/run?job=prices&token=$RUN_TOKEN"         # off the schedule; see below
+curl "$WORKER_URL/health"                                  # config check, no token
+curl "$WORKER_URL/smoke"                                   # live check of the price source
+```
+
+**One job per cron trigger, deliberately.** A Worker invocation has a subrequest
+ceiling, and two jobs sharing one invocation share one budget. `fundamentals`
+runs at 06:15 UTC and `outcomes` at 06:45 UTC so neither can starve the other.
+`CRON_JOBS` in `worker/src/index.ts` and `triggers.crons` in
+`worker/wrangler.jsonc` must agree; a test fails if they do not.
+
+**Check a run with `finished_at`, not with `rows_written`:**
+
+```
+fetch_runs?select=job,started_at,finished_at,ok,rows_written,notes
+  &job=eq.outcomes&order=started_at.desc&limit=3
+```
+
+A null `finished_at` means the invocation was killed part-way through. A row with
+notes means it ran.
+
+Prices are off the schedule: the free source began serving a proof-of-work
+interstitial to automated clients in August 2026. The job is kept and tested;
+wiring a new source is one `fetchPrices` implementation and flipping
+`PRICES_ON_SCHEDULE`.
 
 ---
 
-## Licence and use
+## Running the tests
 
-The coding is a judgement layer over public statements. Every row carries its source, its evidence tier, and its epistemic tag so you can disagree with a specific call rather than the dataset as a whole. Export any filtered selection to CSV from the toolbar.
+```bash
+cd web    && npx tsc --noEmit && npm test && npx vite build
+cd worker && npx tsc --noEmit && npm test
+```
 
-If a row is wrong, the useful correction names the `ref`.
+Expected: **321** web tests, **128** worker tests, silent typechecks, clean build.
+
+Screenshots of every surface at 1440px and 390px:
+
+```bash
+cd web && npx vite build && npx vite preview --port 5200
+cd web && MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' SHOT_BASE=http://localhost:5200 \
+  SHOT_DIR=../docs/rebuild/after npm run shots -- "ledger=#/" "method=#/method"
+```
+
+The `MSYS_NO_PATHCONV` prefix is only needed on Git Bash for Windows, where MSYS
+otherwise rewrites `#/method` into a Windows path and every shot silently
+captures the home page.
+
+The scripted click-through — cold load, drill to a company, drill to a claim,
+reach the source, back out, filter, cross-check a total, hard-reload a deep link,
+browser back — with zero console errors as a pass condition:
+
+```bash
+cd web && npm run walk
+```
+
+The live check of the price source, which is not in the gate because a gate that
+goes red when a third party has a bad afternoon stops being read:
+
+```bash
+cd worker && npm run smoke
+```
+
+---
+
+## Deploying
+
+Nothing deploys on push. Pushing to `main` publishes code to GitHub and changes
+nothing that is serving.
+
+```bash
+cd web    && npm run deploy        # builds, then wrangler deploy
+cd worker && npx wrangler deploy   # only needed when worker/ changed
+```
+
+`/ship` runs the gate, commits, pushes, and reports the deploy status.
+`/rollback` restores the last known-good deployment before diagnosing.
+
+---
+
+## The coding vocabulary
+
+Every claim is coded against what the source actually measured and where the
+gain landed. The `#/method` page renders the full definitions, generated from the
+same file the interface uses.
+
+**Where the gain landed**, ordered by distance from profit:
+
+| | |
+|---|---|
+| Absorbed as slack | Hours freed and kept inside the business. Nothing left the cost base |
+| Kept as quality | A real gain that landed in wellbeing, service or cycle time. No P&L line |
+| Taken from a supplier | The buyer's saving is a supplier's revenue decline |
+| Passed to customers | The surplus reached the buyer through a lower price |
+| Kept as margin | Retained as profit |
+
+**What was measured** distinguishes an audited cost line from an hourly rate
+multiplied by a headcount: `A line item moved`, `Price per unit`, `Hours freed`,
+`People`, `Time`, `Quality`, `Usage volume`, `Source doesn't say`.
+
+**The three conditions** for a gain to reach profit: the billing unit survives,
+there is somewhere for the freed capacity to go, and the firm has permission to
+act. An uncoded condition is not a failed one.
+
+Only rows coded `gain_claim` enter a money total, and only those that named a
+figure in dollars enter the traceable percentage. See `docs/DATA_DICTIONARY.md`
+for every column and `docs/METHODOLOGY.md` for how rows are selected.
+
+---
+
+## Contributing a claim
+
+Use the form on `#/maintenance`. Submissions land in an inbox, not in the ledger:
+nothing appears in the record until it has been read, coded by hand against a
+source, and given a destination.
+
+---
+
+## What this cannot tell you
+
+- **Whether a claim is true.** "Not traceable to a filing line" measures
+  locatability, not honesty.
+- **Whether AI caused anything.** Every figure is an association in time between
+  a stated claim and a disclosed number. No part of any margin movement shown has
+  been attributed to AI.
+- **What is not in the ledger.** This is a hand-built record of public claims,
+  not a survey. Absence from it is not evidence of anything.

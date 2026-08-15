@@ -3,6 +3,14 @@
   "name": "ai-outcome-ledger",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
-  "triggers": { "crons": ["30 22 * * 1-5", "15 6 * * *"] },
+  // One job per trigger. These must stay in step with CRON_JOBS in
+  // src/index.ts — a trigger with no job there is a no-op run, and a job
+  // with no trigger here never runs. `test/schedule.test.ts` asserts the
+  // two lists agree.
+  //
+  // They are thirty minutes apart because a Worker's subrequest budget
+  // is per invocation: fundamentals and outcomes sharing `15 6 * * *`
+  // is what stopped outcomes from ever finishing.
+  "triggers": { "crons": ["15 6 * * *", "45 6 * * *"] },
   "observability": { "enabled": true }
 }
