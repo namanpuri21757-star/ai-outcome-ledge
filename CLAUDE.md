@@ -270,11 +270,37 @@ claim is false. Several of these claims are audited and true.
   that have it. Wiring a new source means one `fetchPrices` implementation and
   flipping that flag back.
 
-- The collector's outcomes job was writing zero rows because `Db.select` issued
-  unbounded requests and PostgREST silently truncates over-cap responses with
-  HTTP 200. Fixed with explicit `Range` pagination. If margins are still blank,
-  read `fetch_runs.notes` — the job now reports which branch it took and how
-  often.
+- **The outcomes job was not finding nothing, it was not finishing** (diagnosed
+  2026-08-15). It read one query per company per series — four series against
+  forty-five companies with published claims, so about a hundred and eighty
+  sequential round trips in one invocation — and never survived them. The
+  giveaway is in `fetch_runs`: every outcomes row had `finished_at` null, `ok`
+  null, an empty `errors` array and no notes, which is what an invocation
+  killed part-way through looks like, because neither the success patch nor the
+  catch block gets to run. On the health strip it read as "the outcomes job
+  wrote no rows", which is true and points at entirely the wrong thing; two
+  sessions went looking for a data problem that was not there.
+
+  It now issues one query per series for the whole table and groups by company
+  in memory: four reads against production instead of a hundred and eighty.
+  `test/runOutcomes.test.ts` asserts the read count stays flat as companies are
+  added, because asserting only on rows written passes just as happily with the
+  loop the wrong way round.
+
+  An earlier fix added explicit `Range` pagination to `Db.select`, which was
+  correct on its own terms — PostgREST silently truncates over-cap responses
+  with HTTP 200 — but it made every one of those hundred and eighty calls
+  potentially multi-request, so it moved the job further from finishing rather
+  than nearer.
+
+  **Check it with `finished_at`, not with `rows_written`:**
+
+  ```
+  fetch_runs?select=job,started_at,finished_at,ok,rows_written,notes
+    &job=eq.outcomes&order=started_at.desc&limit=3
+  ```
+
+  A null `finished_at` means it died again. A row with notes means it ran.
 - Teleperformance, Klarna and CBA do not file with the SEC. No margin series is
   possible for them. This is expected, not a bug, and must not be reported as a
   warning. Enforced in code: the collector tags these with `expected: true` on

@@ -223,22 +223,53 @@ export async function runOutcomes(env: Env): Promise<RunResult> {
   let companiesWithSeries = 0;
   let observationsRead = 0;
 
+  // One query per series for the whole table, grouped in memory.
+  //
+  // This was one query per company per series. With four series and
+  // forty-five companies carrying published claims that is a hundred
+  // and eighty sequential round trips in a single invocation, and the
+  // job never survived them: every outcomes run in `fetch_runs` has a
+  // null `finished_at`, an empty `errors` array and no notes, which is
+  // what being killed mid-flight looks like — the isolate stops, so
+  // neither the success patch nor the catch block ever runs. It reads
+  // as "the job wrote no rows" on the health strip, which sent the
+  // last two sessions looking for a data problem that was not there.
+  //
+  // Four queries, three pages each at most, and the grouping happens
+  // here where it costs nothing.
+  const seriesByCompany = new Map<string, Map<string, Point[]>>();
+
+  for (const key of OUTCOME_SERIES) {
+    try {
+      const obs = await db.select<{ company_id: string; observed_at: string; value: string | number }>(
+        'observations',
+        // Ordered by company first so that pagination is stable and the
+        // points arrive date-ascending within each company, which is
+        // what computeOutcome expects.
+        `select=company_id,observed_at,value&series_key=eq.${key}&order=company_id.asc,observed_at.asc`,
+      );
+      observationsRead += obs.length;
+
+      for (const o of obs) {
+        let forCompany = seriesByCompany.get(o.company_id);
+        if (!forCompany) {
+          forCompany = new Map<string, Point[]>();
+          seriesByCompany.set(o.company_id, forCompany);
+        }
+        const points = forCompany.get(key);
+        const point = { date: o.observed_at, value: Number(o.value) };
+        if (points) points.push(point);
+        else forCompany.set(key, [point]);
+      }
+    } catch (err: any) {
+      // A failure in one series still must not cost the others.
+      errors.push({ scope: key, message: String(err?.message ?? err) });
+    }
+  }
+
   for (const [companyId, list] of byCompany) {
     try {
-      // One query per series rather than one filtered by `in`. Each
-      // comes back small enough to be obviously complete, and a failure
-      // in one series no longer costs the others.
-      const bySeries = new Map<string, Point[]>();
-      for (const key of OUTCOME_SERIES) {
-        const obs = await db.select<{ observed_at: string; value: string | number }>(
-          'observations',
-          `select=observed_at,value&company_id=eq.${companyId}&series_key=eq.${key}&order=observed_at.asc`,
-        );
-        observationsRead += obs.length;
-        if (obs.length) {
-          bySeries.set(key, obs.map((o) => ({ date: o.observed_at, value: Number(o.value) })));
-        }
-      }
+      const bySeries = seriesByCompany.get(companyId) ?? new Map<string, Point[]>();
 
       if (bySeries.size === 0) {
         for (const _ of list) count('no_series');
