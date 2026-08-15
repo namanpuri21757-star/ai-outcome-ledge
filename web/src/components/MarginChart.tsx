@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { ratioAsPct, shortDate } from '../lib/format';
+import { syntheticMargins, useFixtures } from '../lib/devData';
+import { TimeSeriesChart } from './TimeSeriesChart';
+import type { SeriesPoint } from '../lib/chart';
 
 /* ===================================================================
    The only element in this application that is not somebody's
@@ -16,10 +15,7 @@ import { ratioAsPct, shortDate } from '../lib/format';
    it is the answer to the only question that matters: did it work.
    =================================================================== */
 
-interface Point {
-  date: string;
-  margin: number | null;
-}
+type Point = SeriesPoint;
 
 export interface MarginChartProps {
   companySlug: string;
@@ -44,6 +40,13 @@ export function MarginChart({ companySlug, markers = [], height = 220, emptyNote
     }
     setPoints(null);
     setFailed(null);
+
+    // Dropped from production builds with the rest of the fixture
+    // module; see devData.ts.
+    if (useFixtures) {
+      setPoints(syntheticMargins(companySlug));
+      return;
+    }
 
     (async () => {
       const { data: co, error: coErr } = await supabase
@@ -88,15 +91,6 @@ export function MarginChart({ companySlug, markers = [], height = 220, emptyNote
     };
   }, [companySlug]);
 
-  const domain = useMemo(() => {
-    if (!points || points.length === 0) return [-0.5, 0.5] as [number, number];
-    const vals = points.map((p) => p.margin ?? 0);
-    const lo = Math.min(...vals, 0);
-    const hi = Math.max(...vals, 0);
-    const pad = Math.max((hi - lo) * 0.15, 0.02);
-    return [lo - pad, hi + pad] as [number, number];
-  }, [points]);
-
   if (failed) {
     return <div className="chart-empty">{failed}</div>;
   }
@@ -114,72 +108,5 @@ export function MarginChart({ companySlug, markers = [], height = 220, emptyNote
     );
   }
 
-  return (
-    <div className="chart-wrap" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={points} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
-          <CartesianGrid stroke="var(--rule)" strokeDasharray="2 4" vertical={false} />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }}
-            tickFormatter={(d: string) => d.slice(2, 7)}
-            minTickGap={28}
-            stroke="var(--rule-strong)"
-          />
-          <YAxis
-            domain={domain}
-            tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }}
-            tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-            width={44}
-            stroke="var(--rule-strong)"
-          />
-          <ReferenceLine y={0} stroke="var(--rule-strong)" />
-          {markers.map((m) => (
-            <ReferenceLine
-              key={m.date + m.label}
-              x={nearestDate(points, m.date)}
-              stroke="var(--gap)"
-              strokeDasharray="3 3"
-            />
-          ))}
-          <Tooltip
-            contentStyle={{
-              background: 'var(--paper-raised)',
-              border: '1px solid var(--rule-strong)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              borderRadius: 0,
-            }}
-            labelFormatter={(d: string) => shortDate(d)}
-            formatter={(v: number) => [ratioAsPct(v), 'Operating margin']}
-          />
-          <Line
-            type="monotone"
-            dataKey="margin"
-            stroke="var(--claimed)"
-            strokeWidth={1.6}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/** Recharts draws a reference line on a category axis only when the value
- *  is an actual tick, so a claim date is snapped to the nearest period end. */
-export function nearestDate(points: Point[], target: string): string {
-  if (points.length === 0) return target;
-  let best = points[0].date;
-  let bestGap = Infinity;
-  const t = Date.parse(target + 'T00:00:00Z');
-  for (const p of points) {
-    const gap = Math.abs(Date.parse(p.date + 'T00:00:00Z') - t);
-    if (gap < bestGap) {
-      bestGap = gap;
-      best = p.date;
-    }
-  }
-  return best;
+  return <TimeSeriesChart points={points} markers={markers} height={height} />;
 }

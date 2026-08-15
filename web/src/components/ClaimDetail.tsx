@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import {
-  CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts';
 import { supabase } from '../lib/supabase';
+import { syntheticMargins, useFixtures } from '../lib/devData';
+import { TimeSeriesChart } from './TimeSeriesChart';
 import { bps, pct, ratioAsPct, shortDate, usd } from '../lib/format';
 import { sourceLinks } from '../lib/sourceLinks';
 import { DESTINATIONS } from '../lib/labels';
@@ -145,6 +144,10 @@ function MarginChart({ slug, claimDate }: { slug: string; claimDate: string }) {
 
   useEffect(() => {
     let alive = true;
+    if (useFixtures) {
+      setData(syntheticMargins(slug).filter((p): p is { date: string; margin: number } => p.margin != null));
+      return;
+    }
     (async () => {
       const { data: co } = await supabase.from('companies').select('id').eq('slug', slug).limit(1);
       const id = co?.[0]?.id;
@@ -156,7 +159,10 @@ function MarginChart({ slug, claimDate }: { slug: string; claimDate: string }) {
         .eq('series_key', 'operating_margin_q')
         .order('observed_at', { ascending: true });
       if (alive) {
-        setData((obs ?? []).map((o: any) => ({ date: o.observed_at, margin: Number(o.value) * 100 })));
+        // Stored and drawn as a ratio. The ×100 that used to live here
+        // meant this chart and the company page's chart disagreed about
+        // what "margin" was by two orders of magnitude.
+        setData((obs ?? []).map((o: any) => ({ date: o.observed_at, margin: Number(o.value) })));
       }
     })();
     return () => { alive = false; };
@@ -172,45 +178,12 @@ function MarginChart({ slug, claimDate }: { slug: string; claimDate: string }) {
   }
 
   return (
-    <div style={{ height: 150 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
-          <CartesianGrid stroke="#c9d2d9" strokeDasharray="2 3" vertical={false} />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono' }}
-            tickFormatter={(d: string) => d.slice(2, 7)}
-            stroke="#7c8b97"
-            minTickGap={24}
-          />
-          <YAxis
-            tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono' }}
-            stroke="#7c8b97"
-            tickFormatter={(v: number) => `${v.toFixed(0)}%`}
-            width={44}
-          />
-          <Tooltip
-            formatter={(v: any) => [`${Number(v).toFixed(2)}%`, 'Operating margin']}
-            contentStyle={{ fontFamily: 'IBM Plex Mono', fontSize: 12, border: '1px solid #a5b3bd' }}
-          />
-          <ReferenceLine x={nearestDate(data, claimDate)} stroke="#a8391f" strokeDasharray="4 2" />
-          <Line type="monotone" dataKey="margin" stroke="#2c5c8c" strokeWidth={1.6} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <TimeSeriesChart
+      points={data}
+      markers={[{ date: claimDate, label: 'Claim made' }]}
+      height={150}
+    />
   );
-}
-
-/** Recharts needs a category value that exists in the data, so snap the claim
- *  date to the nearest observed period rather than dropping the marker. */
-function nearestDate(data: Array<{ date: string }>, target: string): string | undefined {
-  let best: string | undefined;
-  let bestGap = Infinity;
-  for (const d of data) {
-    const gap = Math.abs(Date.parse(d.date) - Date.parse(target));
-    if (gap < bestGap) { bestGap = gap; best = d.date; }
-  }
-  return best;
 }
 
 

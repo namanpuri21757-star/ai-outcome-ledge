@@ -21,7 +21,11 @@ const SHOTS = [
   ['patterns', '#/patterns', { width: 1440, height: 1500 }],
   ['patterns-conditions', '#/patterns?condn=3', { width: 1440, height: 1000 }],
   ['patterns-pinned', '#/patterns?pin=northwind,acme-group,meridian', { width: 1440, height: 1200 }],
-  ['company', '#/company/northwind', { width: 1440, height: 1600 }],
+  // Both halves of the margin panel: a company whose filings produce a
+  // series, and one that files nothing. The empty state is the common
+  // case in the real ledger, so it is screenshotted rather than assumed.
+  ['company', '#/company/castleford', { width: 1440, height: 1600 }],
+  ['company-no-series', '#/company/northwind', { width: 1440, height: 900 }],
   ['ledger', '#/ledger', { width: 1440, height: 1000 }],
   ['conditions', '#/conditions', { width: 1440, height: 1000 }],
   ['flow-mobile', '#/flow', { width: 390, height: 1400 }],

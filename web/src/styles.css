@@ -331,7 +331,40 @@ h4 { font-size: 15px; margin: 0 0 4px; }
   padding: 16px 18px; margin-bottom: 16px;
 }
 .section-head { margin-bottom: 10px; }
-.chart-wrap { width: 100%; }
+/* ---------------- margin series ----------------
+   Drawn by TimeSeriesChart. Every mark is declared here rather than
+   as an SVG attribute, so the chart answers to the same tokens as
+   the rest of the page. */
+
+.chart-wrap { width: 100%; position: relative; }
+.chart-svg { display: block; overflow: visible; }
+
+.chart-grid { stroke: var(--rule); stroke-dasharray: 2 4; }
+.chart-grid.is-zero { stroke: var(--rule-strong); stroke-dasharray: none; }
+
+.chart-axis {
+  font-family: var(--font-mono); font-size: 10px; fill: var(--ink-3);
+}
+
+/* The claim date. Audit red, dashed, behind the line rather than over
+   it: it marks when the assertion was made, and the series is the
+   thing being read. */
+.chart-marker { stroke: var(--gap); stroke-dasharray: 3 3; stroke-width: 1; }
+
+.chart-line { fill: none; stroke: var(--claimed); stroke-width: 1.6px; }
+
+.chart-readout line { stroke: var(--ink-3); stroke-width: 1; }
+.chart-readout circle { fill: var(--claimed); stroke: var(--paper-raised); stroke-width: 1.5px; }
+
+.chart-tip {
+  position: absolute; top: 0; transform: translateX(-50%);
+  background: var(--paper-raised); border: 1px solid var(--rule-strong);
+  padding: 3px 7px; pointer-events: none; white-space: nowrap;
+  display: flex; gap: 8px; align-items: baseline;
+}
+.chart-tip strong { font-family: var(--font-mono); font-size: 12px; }
+.chart-tip span { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+
 .chart-empty {
   font-family: var(--font-mono); font-size: 13px; color: var(--ink-3);
   padding: 28px 16px; text-align: center; border: 1px dashed var(--rule-strong); background: var(--paper);
