@@ -1,7 +1,6 @@
-import { DESTINATION_ORDER, destination } from '../lib/labels';
 import { usd } from '../lib/format';
 import { GapBar } from './GapBar';
-import type { FlowModel } from '../lib/flow';
+import { ladderRungs, type FlowModel } from '../lib/flow';
 
 /* ===================================================================
    THE FLOW, ON A NARROW SCREEN
@@ -26,24 +25,9 @@ export interface FlowLadderProps {
 }
 
 export function FlowLadder({ model, onSelectDestination, focusRank }: FlowLadderProps) {
-  // Every destination present, in the one ladder order, largest scale
-  // shared so the rungs compare to each other.
-  const rungs = DESTINATION_ORDER
-    .map((rank) => {
-      const node = model.nodes.find((n) => n.column === 'destination' && n.rank === rank);
-      if (!node) return null;
-
-      // What reached a filing from this destination, read off the links
-      // rather than recomputed, so the ladder and the diagram cannot
-      // disagree about the same number.
-      const traced = model.links
-        .filter((l) => l.source === node.id && l.target === 'out:traced')
-        .reduce((sum, l) => sum + l.value, 0);
-
-      return { rank, label: destination(rank).name, claimed: node.value, traced };
-    })
-    .filter((r): r is { rank: number; label: string; claimed: number; traced: number } => r !== null);
-
+  // Every destination present, in the one ladder order, on a shared
+  // scale so the rungs compare to each other.
+  const rungs = ladderRungs(model);
   if (rungs.length === 0) return null;
 
   const max = Math.max(...rungs.map((r) => r.claimed), 1);

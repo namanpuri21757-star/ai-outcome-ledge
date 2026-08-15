@@ -3,6 +3,7 @@ import { row, CORPUS } from './fixtures';
 import {
   buildFlow,
   columnOrder,
+  ladderRungs,
   namedCompanies,
   selectionForNode,
   type FlowNode,
@@ -313,5 +314,41 @@ describe('selectionForNode', () => {
     expect(
       selectionForNode({ id: 'out:traced', column: 'outcome', label: '', value: 1, traced: true }),
     ).toBeNull();
+  });
+});
+
+describe('ladderRungs — the diagram on a narrow screen', () => {
+  const m = buildFlow(CORPUS);
+
+  it('keeps the one ladder order rather than sorting by size', () => {
+    const ranks = ladderRungs(m).map((r) => r.rank);
+    expect(ranks).toEqual(DESTINATION_ORDER.filter((r) => ranks.includes(r)));
+  });
+
+  it('omits destinations that are not in the selection', () => {
+    const only = buildFlow(CORPUS.filter((r) => r.destination === 1));
+    expect(ladderRungs(only).every((r) => r.rank === 1)).toBe(true);
+  });
+
+  it('agrees with the diagram about every figure', () => {
+    for (const rung of ladderRungs(m)) {
+      const node = m.nodes.find((n) => n.column === 'destination' && n.rank === rung.rank)!;
+      expect(rung.claimed).toBe(node.value);
+      expect(rung.traced).toBeLessThanOrEqual(rung.claimed);
+    }
+  });
+
+  it('totals to the same claimed figure as the diagram', () => {
+    const sum = ladderRungs(m).reduce((a, r) => a + r.claimed, 0);
+    expect(sum).toBeCloseTo(m.claimedUsd, 6);
+  });
+
+  it('totals to the same traced figure as the diagram', () => {
+    const sum = ladderRungs(m).reduce((a, r) => a + r.traced, 0);
+    expect(sum).toBeCloseTo(m.tracedUsd, 6);
+  });
+
+  it('is empty when nothing is selected', () => {
+    expect(ladderRungs(buildFlow([]))).toEqual([]);
   });
 });

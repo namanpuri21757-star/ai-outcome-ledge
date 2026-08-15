@@ -321,6 +321,38 @@ export function selectionForNode(node: FlowNode): FlowSelection | null {
   return null;
 }
 
+/**
+ * The diagram as a ladder: one rung per destination, in rank order,
+ * each carrying what was claimed and how much of it reached a filing.
+ *
+ * Read off the model's own links rather than recomputed from the rows,
+ * so the narrow-screen rendering and the diagram cannot disagree about
+ * the same number.
+ */
+export interface LadderRung {
+  rank: number;
+  label: string;
+  claimed: number;
+  traced: number;
+}
+
+export function ladderRungs(model: FlowModel): LadderRung[] {
+  const out: LadderRung[] = [];
+
+  for (const rank of DESTINATION_ORDER) {
+    const node = model.nodes.find((n) => n.column === 'destination' && n.rank === rank);
+    if (!node) continue;
+
+    const traced = model.links
+      .filter((l) => l.source === node.id && l.target === 'out:traced')
+      .reduce((sum, l) => sum + l.value, 0);
+
+    out.push({ rank, label: destination(rank).name, claimed: node.value, traced });
+  }
+
+  return out;
+}
+
 /** Column headings, left to right. */
 export const FLOW_COLUMNS: Array<{ column: FlowColumn; label: string }> = [
   { column: 'company', label: 'Who claimed it' },
