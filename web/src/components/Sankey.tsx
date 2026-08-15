@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey';
 import type { SankeyGraph, SankeyNode, SankeyLink } from 'd3-sankey';
 import { columnOrder, FLOW_COLUMNS, type FlowModel, type FlowNode, type FlowLink } from '../lib/flow';
-import { usd } from '../lib/format';
+import { clip, usd } from '../lib/format';
 
 /* ===================================================================
    THE FLOW DIAGRAM
@@ -25,7 +25,12 @@ type LayoutLink = SankeyLink<FlowNode, FlowLink>;
 const NODE_WIDTH = 13;
 const NODE_PADDING = 15;
 const ROW_MIN = 30;
-const MARGIN = { top: 26, right: 152, bottom: 8, left: 128 };
+const MARGIN = { top: 26, right: 152, bottom: 22, left: 150 };
+
+/** Longest label the left gutter can hold. "International Business
+ *  Machines" ran off the edge and read as "ational Business Machines",
+ *  so names are cut here and the full one stays in the tooltip. */
+const LABEL_MAX = 24;
 
 /**
  * Below this the four columns and their labels cannot coexist, so the
@@ -218,7 +223,8 @@ export function Sankey({ model, onSelectNode, activeId, onActiveChange }: Sankey
                     y={h / 2}
                     textAnchor={rightHand ? 'start' : 'end'}
                   >
-                    <tspan className="flow-node-name">{n.label}</tspan>
+                    <title>{`${n.label} — ${usd(n.value ?? 0)}`}</title>
+                    <tspan className="flow-node-name">{clip(n.label, LABEL_MAX)}</tspan>
                     <tspan className="flow-node-value" x={rightHand ? NODE_WIDTH + 8 : -8} dy="1.15em">
                       {usd(n.value ?? 0)}
                     </tspan>
