@@ -7,15 +7,22 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "shots": "node shots/shoot.mjs",
+    "a11y": "node shots/a11y.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "d3-sankey": "^0.12.3",
+    "d3-shape": "^3.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.13.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/d3-sankey": "^0.12.5",
+    "@types/d3-shape": "^3.1.8",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

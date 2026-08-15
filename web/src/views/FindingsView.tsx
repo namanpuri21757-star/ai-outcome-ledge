@@ -18,35 +18,69 @@ import { COPY } from '../lib/labels';
    to copy describing data that is not there.
    =================================================================== */
 
-export function FindingsView({
-  rows, allRows, onOpen, onCompany,
-}: {
-  rows: LedgerRow[];
-  allRows: LedgerRow[];
-  onOpen: (finding: Finding) => void;
-  onCompany: (slug: string, context: string) => void;
-}) {
+/**
+ * The gap in one number.
+ *
+ * Extracted so the flow diagram can sit directly beneath it without the
+ * sentence being retyped anywhere. It is generated from the rows, so
+ * there is exactly one copy of it and it cannot drift.
+ */
+export function HeadlineFigure({ rows }: { rows: LedgerRow[] }) {
   const t = totals(rows);
 
-  return (
-    <div className="findings">
-      <section className="headline-figure">
+  // Never state the sentence with zeroes in it. "$0 has been claimed
+  // across 0 disclosures. The remaining $0 is not an accusation.
+  // Several of these claims are audited and true" describes a set of
+  // claims that is not there, which is the one thing this project
+  // cannot do.
+  if (t.dollarClaims === 0) {
+    return (
+      <section className="headline-figure is-empty">
         <div>
           <span className="eyebrow">The gap, in one number</span>
           <p className="big-claim">
-            <strong>{usd(t.claimedUsd)}</strong> of AI savings has been claimed across{' '}
-            {t.dollarClaims} disclosures. <strong className="is-traced">{usd(t.tracedUsd)}</strong>{' '}
-            of it can be matched to a line item in a financial statement.
+            No claim in this selection carries a dollar figure, so there is no gap to state.
           </p>
-          <p className="small" title={COPY.untracedMeaning}>
-            The remaining {usd(t.unreconciledUsd)} is not an accusation. Several of these claims are
-            audited and true. It measures the distance between a number being real and a number being
-            locatable.
+          <p className="small">
+            {t.claims === 0
+              ? 'Nothing matches the current filters at all. Remove a chip above to bring rows back.'
+              : `${t.claims} row${t.claims === 1 ? '' : 's'} match, but none of them is a gain claim with an amount attached.`}
           </p>
         </div>
       </section>
+    );
+  }
 
-      <div className="finding-grid">
+  return (
+    <section className="headline-figure">
+      <div>
+        <span className="eyebrow">The gap, in one number</span>
+        <p className="big-claim">
+          <strong>{usd(t.claimedUsd)}</strong> of AI savings has been claimed across{' '}
+          {t.dollarClaims} disclosures. <strong className="is-traced">{usd(t.tracedUsd)}</strong>{' '}
+          of it can be matched to a line item in a financial statement.
+        </p>
+        <p className="small" title={COPY.untracedMeaning}>
+          The remaining {usd(t.unreconciledUsd)} is not an accusation. Several of these claims are
+          audited and true. It measures the distance between a number being real and a number being
+          locatable.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** The three written answers. One definition, used on both the flow
+ *  page and the findings route. */
+export function FindingGrid({
+  rows, onOpen, onCompany,
+}: {
+  rows: LedgerRow[];
+  onOpen: (finding: Finding) => void;
+  onCompany: (slug: string, context: string) => void;
+}) {
+  return (
+    <div className="finding-grid">
         {FINDINGS.map((f) => {
           const result = f.run(rows);
           return (
@@ -99,14 +133,34 @@ export function FindingsView({
             </article>
           );
         })}
-      </div>
+    </div>
+  );
+}
 
-      {rows.length !== allRows.length && (
-        <p className="note">
-          These answers are computed over the {rows.length} rows currently selected, not all{' '}
-          {allRows.length}. Clear the filters above to ask the questions of the whole ledger.
-        </p>
-      )}
+/** How much of the ledger the answers above were computed over. */
+export function SelectionNote({ rows, allRows }: { rows: LedgerRow[]; allRows: LedgerRow[] }) {
+  if (rows.length === allRows.length) return null;
+  return (
+    <p className="note">
+      These answers are computed over the {rows.length} rows currently selected, not all{' '}
+      {allRows.length}. Clear the filters above to ask the questions of the whole ledger.
+    </p>
+  );
+}
+
+export function FindingsView({
+  rows, allRows, onOpen, onCompany,
+}: {
+  rows: LedgerRow[];
+  allRows: LedgerRow[];
+  onOpen: (finding: Finding) => void;
+  onCompany: (slug: string, context: string) => void;
+}) {
+  return (
+    <div className="findings">
+      <HeadlineFigure rows={rows} />
+      <FindingGrid rows={rows} onOpen={onOpen} onCompany={onCompany} />
+      <SelectionNote rows={rows} allRows={allRows} />
     </div>
   );
 }

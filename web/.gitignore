@@ -3,3 +3,6 @@ dist/
 .env
 .env.local
 .wrangler/
+
+# Screenshot working artefacts: for judging a layout, not for keeping.
+shots/out/

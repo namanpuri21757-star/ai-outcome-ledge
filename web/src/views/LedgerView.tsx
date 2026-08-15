@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { LedgerRow } from '../lib/types';
 import { sortRows, type SortKey } from '../lib/filters';
 import { usd, bps, shortDate, clip } from '../lib/format';
@@ -64,9 +64,11 @@ export function LedgerView({
           {sorted.map((r) => {
             const open = openId === r.id;
             return (
-              <>
+              // The key belongs on the fragment: it is the array element.
+              // With it on the inner rows React saw an unkeyed list and
+              // reused the wrong row when the sort changed.
+              <Fragment key={r.id}>
                 <tr
-                  key={r.id}
                   className={open ? 'is-open' : ''}
                   onClick={() => setOpenId(open ? null : r.id)}
                 >
@@ -102,7 +104,7 @@ export function LedgerView({
                   </td>
                 </tr>
                 {open && (
-                  <tr key={r.id + '-detail'} className="detail-row">
+                  <tr className="detail-row">
                     <td colSpan={7}>
                       <ClaimCard row={r} max={max} onCompany={(s) => onCompany(s, 'the ledger')} />
                       <p className="small is-null" style={{ padding: '0 18px 14px' }}>
@@ -113,7 +115,7 @@ export function LedgerView({
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             );
           })}
         </tbody>

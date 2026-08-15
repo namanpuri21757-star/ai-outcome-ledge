@@ -1,10 +1,14 @@
 import type { ClaimKind, EpistemicTag, LedgerRow, MeasurementBasis } from './types';
-import { basis, destination, group, KINDS } from './labels';
+import { basis, destination, group, CONDITIONS, KINDS } from './labels';
 
 /**
  * Every view reads one filter object, so a selection made on the
  * destinations page is still in force when you switch to the ledger.
  */
+export type ConditionKey = 'billing' | 'sink' | 'permission';
+
+export const CONDITION_KEYS: ConditionKey[] = ['billing', 'sink', 'permission'];
+
 export interface Filters {
   search: string;
   kinds: ClaimKind[];
@@ -14,6 +18,11 @@ export interface Filters {
   tiers: number[];
   groups: string[];
   companies: string[];
+  sectors: string[];
+  /** Rows where these named conditions are met. */
+  conditionsMet: ConditionKey[];
+  /** Rows where exactly this many of the three conditions are met. */
+  conditionCounts: number[];
   counterpartyOnly: boolean;
   conflictOnly: boolean;
   unverifiedOnly: boolean;
@@ -31,6 +40,9 @@ export const EMPTY_FILTERS: Filters = {
   tiers: [],
   groups: [],
   companies: [],
+  sectors: [],
+  conditionsMet: [],
+  conditionCounts: [],
   counterpartyOnly: false,
   conflictOnly: false,
   unverifiedOnly: false,
@@ -38,6 +50,31 @@ export const EMPTY_FILTERS: Filters = {
   from: null,
   to: null,
 };
+
+/**
+ * How many of the three conditions this row meets.
+ *
+ * Null when any of the three is uncoded, because an uncoded condition
+ * is not a failed one. Returning 2 for a row that is really "two met
+ * and one unknown" would put it in the same bucket as a row that was
+ * actually tested and failed, which is the specific mistake this
+ * project exists to avoid.
+ */
+export function rowConditionCount(r: LedgerRow): number | null {
+  const vals = [r.cond_billing_unit_survives, r.cond_demand_sink, r.cond_permission_to_act];
+  if (vals.some((v) => v === null || v === undefined)) return null;
+  return vals.filter(Boolean).length;
+}
+
+const CONDITION_FIELD: Record<ConditionKey, keyof LedgerRow> = {
+  billing: 'cond_billing_unit_survives',
+  sink: 'cond_demand_sink',
+  permission: 'cond_permission_to_act',
+};
+
+export function meetsCondition(r: LedgerRow, key: ConditionKey): boolean {
+  return r[CONDITION_FIELD[key]] === true;
+}
 
 export function isFilterActive(f: Filters): boolean {
   return activeFilterChips(f).length > 0;
@@ -102,6 +139,27 @@ export function activeFilterChips(f: Filters): FilterChip[] {
       id: `company-${c}`,
       label: c,
       clear: (x) => ({ ...x, companies: x.companies.filter((v) => v !== c) }),
+    });
+  }
+  for (const s of f.sectors) {
+    chips.push({
+      id: `sector-${s}`,
+      label: s.toLowerCase(),
+      clear: (x) => ({ ...x, sectors: x.sectors.filter((v) => v !== s) }),
+    });
+  }
+  for (const k of f.conditionsMet) {
+    chips.push({
+      id: `cond-${k}`,
+      label: `${CONDITIONS[k].name.toLowerCase()} met`,
+      clear: (x) => ({ ...x, conditionsMet: x.conditionsMet.filter((v) => v !== k) }),
+    });
+  }
+  for (const n of f.conditionCounts) {
+    chips.push({
+      id: `condcount-${n}`,
+      label: n === 3 ? 'all three conditions met' : `${n} of three conditions met`,
+      clear: (x) => ({ ...x, conditionCounts: x.conditionCounts.filter((v) => v !== n) }),
     });
   }
   for (const t of f.tags) {
@@ -198,6 +256,14 @@ export function applyFilters(rows: LedgerRow[], f: Filters): LedgerRow[] {
     if (f.tiers.length && !f.tiers.includes(r.evidence_tier)) return false;
     if (f.groups.length && !(r.group_code && f.groups.includes(r.group_code))) return false;
     if (f.companies.length && !f.companies.includes(r.company_slug)) return false;
+    if (f.sectors.length && !(r.sector && f.sectors.includes(r.sector))) return false;
+    if (f.conditionsMet.length && !f.conditionsMet.every((k) => meetsCondition(r, k))) return false;
+    if (f.conditionCounts.length) {
+      const n = rowConditionCount(r);
+      // A row with an uncoded condition has no count, so it cannot
+      // match a count filter. It is excluded, not counted as zero.
+      if (n === null || !f.conditionCounts.includes(n)) return false;
+    }
     if (f.counterpartyOnly && !r.counterparty_absorbed) return false;
     if (f.conflictOnly && !r.conflict_of_interest) return false;
     if (f.unverifiedOnly && r.verification_status === 'verified_primary') return false;

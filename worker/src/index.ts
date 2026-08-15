@@ -326,11 +326,30 @@ async function runStep(db: Db, trigger: string, job: string, fn: () => Promise<R
   }
 }
 
+/**
+ * Prices are no longer collected on a schedule.
+ *
+ * Stooq began refusing automated clients in August 2026 and there is no
+ * second source wired up yet, so a daily run would do nothing but ask a
+ * closed door twenty times and file the same warning. The job itself is
+ * kept, tested and reachable at `/run?job=prices`: the moment a source
+ * is chosen it is one `fetchPrices` implementation away from working
+ * again.
+ *
+ * Nothing is deleted. `price_close` stays in OUTCOME_SERIES, so the
+ * observations already collected before the wall went up still produce
+ * outcome rows, and "Share price, one year" still reads for the claims
+ * that have it rather than being blanked for everyone.
+ */
+export const PRICES_ON_SCHEDULE = false;
+
 export async function runAll(env: Env, trigger: string) {
   const db = new Db(env);
   const results: RunResult[] = [];
   results.push(await runStep(db, trigger, 'fundamentals', () => runFundamentals(env)));
-  results.push(await runStep(db, trigger, 'prices', () => runPrices(env)));
+  if (PRICES_ON_SCHEDULE) {
+    results.push(await runStep(db, trigger, 'prices', () => runPrices(env)));
+  }
   results.push(await runStep(db, trigger, 'outcomes', () => runOutcomes(env)));
   return results;
 }
@@ -351,7 +370,9 @@ export default {
     // the margin column, and it must still run when the collector ahead
     // of it could not reach its source.
     if (controller.cron === '30 22 * * 1-5') {
-      await runStep(db, controller.cron, 'prices', () => runPrices(env));
+      if (PRICES_ON_SCHEDULE) {
+        await runStep(db, controller.cron, 'prices', () => runPrices(env));
+      }
       await runStep(db, controller.cron, 'outcomes', () => runOutcomes(env));
     } else {
       await runStep(db, controller.cron, 'fundamentals', () => runFundamentals(env));

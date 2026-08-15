@@ -1,0 +1,234 @@
+import type { LedgerRow, MeasurementBasis } from './types';
+import { basis, destination, DESTINATION_ORDER } from './labels';
+
+/* ===================================================================
+   THE FLOW
+
+   One claimed dollar, followed from the company that claimed it to
+   whether it can be found in a filing.
+
+     company → what was measured → where it landed → traced or not
+
+   This is the reconciliation bar unrolled. The bar puts one claim's
+   traced and untraced portions side by side; this puts all of them
+   side by side at once, which is the only way to see that six
+   companies are stuck for the same reason.
+
+   Three rules keep it honest, and all three are enforced here rather
+   than in the component:
+
+   1. Only `gain_claim` rows enter, the same rule `totals()` applies.
+      A market-cap loss and an acquisition price are not claimed gains,
+      and letting them set the width of the pipe would make the
+      headline meaningless.
+
+   2. A claim with no dollar figure has zero width and would simply
+      vanish. Silently dropping rows from a diagram about missing
+      numbers would be its own small lie, so they are counted and
+      returned for the caller to state.
+
+   3. Destinations keep their ladder order. The rank is distance from
+      profit, so vertical position has to carry it; d3-sankey would
+      otherwise reorder the column to minimise crossings and quietly
+      destroy the encoding.
+   =================================================================== */
+
+export type FlowColumn = 'company' | 'basis' | 'destination' | 'outcome';
+
+export interface FlowNode {
+  /** Stable id, namespaced by column: `co:ibm`, `dest:1`, `out:traced`. */
+  id: string;
+  column: FlowColumn;
+  label: string;
+  /** Total value passing through, in USD. */
+  value: number;
+  /** Destination rank, when this node is a destination. Drives ordering. */
+  rank?: number;
+  /** Company slug, when this node is one company, for click-through. */
+  slug?: string;
+  /** Measurement basis key, when this node is one basis. */
+  basisKey?: MeasurementBasis;
+  /** True for the aggregated "N other companies" node, which is not clickable. */
+  aggregate?: boolean;
+  /** The traced/untraced terminals, which carry the hatch. */
+  traced?: boolean;
+}
+
+export interface FlowLink {
+  source: string;
+  target: string;
+  value: number;
+  /** Rows behind this link, so a click can filter to exactly them. */
+  refs: string[];
+}
+
+export interface FlowModel {
+  nodes: FlowNode[];
+  links: FlowLink[];
+  claimedUsd: number;
+  tracedUsd: number;
+  untracedUsd: number;
+  /** Gain claims carrying no dollar figure: real rows, no width. */
+  gainsWithoutAmount: number;
+  /** Rows excluded because they are not gain claims. */
+  nonGainRows: number;
+  /** Companies folded into the aggregate node. */
+  companiesFolded: number;
+}
+
+/** Named companies in the first column before the tail is folded up.
+ *  Beyond this the column stops being readable and starts being a wall. */
+export const MAX_NAMED_COMPANIES = 12;
+
+const ORDER_INDEX = new Map(DESTINATION_ORDER.map((rank, i) => [rank, i]));
+
+/** Sort key for a node within its column. Exported because the layout
+ *  has to apply the same order and it must not drift from this file. */
+export function columnOrder(node: FlowNode): number {
+  if (node.column === 'destination') return ORDER_INDEX.get(node.rank ?? 0) ?? 99;
+  // Untraced above traced, mirroring the ladder beside it: the
+  // destinations furthest from profit sit at the top and are the ones
+  // that end up untraceable, while "kept as margin" sits at the bottom
+  // and is where nearly all the traced money comes from. Ordering it
+  // the other way round is defensible on paper and produces a single
+  // enormous crossing on screen, which reads as noise rather than
+  // as the two clean streams it actually is.
+  if (node.column === 'outcome') return node.traced ? 1 : 0;
+  return 0;
+}
+
+export function buildFlow(rows: LedgerRow[], maxNamed = MAX_NAMED_COMPANIES): FlowModel {
+  const gains = rows.filter((r) => r.claim_kind === 'gain_claim');
+  const nonGainRows = rows.length - gains.length;
+
+  const withMoney = gains.filter((r) => (r.claimed_amount_usd ?? 0) > 0);
+  const gainsWithoutAmount = gains.length - withMoney.length;
+
+  // Which companies get their own node. The rest are one honest lump
+  // rather than forty illegible slivers.
+  const byCompany = new Map<string, { name: string; total: number }>();
+  for (const r of withMoney) {
+    const cur = byCompany.get(r.company_slug) ?? { name: r.company_name, total: 0 };
+    cur.total += r.claimed_amount_usd ?? 0;
+    byCompany.set(r.company_slug, cur);
+  }
+  const ranked = [...byCompany.entries()].sort((a, b) => b[1].total - a[1].total);
+  const named = new Set(ranked.slice(0, maxNamed).map(([slug]) => slug));
+  const companiesFolded = Math.max(0, ranked.length - named.size);
+
+  const nodes = new Map<string, FlowNode>();
+  const links = new Map<string, FlowLink>();
+
+  const addNode = (n: FlowNode) => {
+    const cur = nodes.get(n.id);
+    if (cur) cur.value += n.value;
+    else nodes.set(n.id, { ...n });
+  };
+
+  const addLink = (source: string, target: string, value: number, ref: string) => {
+    if (value <= 0) return;
+    const key = `${source}|${target}`;
+    const cur = links.get(key);
+    if (cur) {
+      cur.value += value;
+      if (!cur.refs.includes(ref)) cur.refs.push(ref);
+    } else {
+      links.set(key, { source, target, value, refs: [ref] });
+    }
+  };
+
+  let claimedUsd = 0;
+  let tracedUsd = 0;
+
+  for (const r of withMoney) {
+    const claimed = r.claimed_amount_usd ?? 0;
+    // Traced can never exceed claimed: a bar wider than its own scale
+    // is a data error, not a finding.
+    const traced = Math.max(0, Math.min(r.traceable_to_pl_usd ?? 0, claimed));
+    const untraced = claimed - traced;
+
+    claimedUsd += claimed;
+    tracedUsd += traced;
+
+    const isNamed = named.has(r.company_slug);
+    const coId = isNamed ? `co:${r.company_slug}` : 'co:__other__';
+    const basisId = `basis:${r.measurement_basis}`;
+    const destId = `dest:${r.destination}`;
+
+    addNode({
+      id: coId,
+      column: 'company',
+      label: isNamed ? r.company_name : `${companiesFolded} other companies`,
+      value: claimed,
+      slug: isNamed ? r.company_slug : undefined,
+      aggregate: !isNamed,
+    });
+    addNode({
+      id: basisId,
+      column: 'basis',
+      label: basis(r.measurement_basis).name,
+      value: claimed,
+      basisKey: r.measurement_basis,
+    });
+    addNode({
+      id: destId,
+      column: 'destination',
+      label: destination(r.destination).name,
+      value: claimed,
+      rank: r.destination,
+    });
+
+    addLink(coId, basisId, claimed, r.ref);
+    addLink(basisId, destId, claimed, r.ref);
+
+    if (traced > 0) {
+      addNode({ id: 'out:traced', column: 'outcome', label: 'Traceable to a filing', value: traced, traced: true });
+      addLink(destId, 'out:traced', traced, r.ref);
+    }
+    if (untraced > 0) {
+      addNode({ id: 'out:untraced', column: 'outcome', label: 'Not traceable', value: untraced, traced: false });
+      addLink(destId, 'out:untraced', untraced, r.ref);
+    }
+  }
+
+  return {
+    nodes: [...nodes.values()],
+    links: [...links.values()],
+    claimedUsd,
+    tracedUsd,
+    untracedUsd: claimedUsd - tracedUsd,
+    gainsWithoutAmount,
+    nonGainRows,
+    companiesFolded,
+  };
+}
+
+/**
+ * What a click on a node should filter the app to.
+ *
+ * Returned as a patch rather than applied here, so the caller merges it
+ * into whatever is already in force and the URL stays the one source of
+ * truth for the selection.
+ */
+export interface FlowSelection {
+  companies?: string[];
+  bases?: MeasurementBasis[];
+  destinations?: number[];
+}
+
+export function selectionForNode(node: FlowNode): FlowSelection | null {
+  if (node.column === 'company') return node.slug ? { companies: [node.slug] } : null;
+  if (node.column === 'basis') return node.basisKey ? { bases: [node.basisKey] } : null;
+  if (node.column === 'destination') return { destinations: [node.rank ?? 0] };
+  // The outcome column is a property of each row's arithmetic rather
+  // than a coded field, so there is no filter that means "traced".
+  return null;
+}
+
+/** Column headings, left to right. */
+export const FLOW_COLUMNS: Array<{ column: FlowColumn; label: string }> = [
+  { column: 'company', label: 'Who claimed it' },
+  { column: 'basis', label: 'What was measured' },
+  { column: 'destination', label: 'Where it landed' },
+  { column: 'outcome', label: 'Found in a filing?' },
+];

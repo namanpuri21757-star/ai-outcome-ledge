@@ -340,7 +340,14 @@ h4 { font-size: 15px; margin: 0 0 4px; }
 .company-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .summary-block { border: 1px solid var(--rule-strong); background: var(--paper-raised); padding: 14px 16px; }
 .dest-mix { list-style: none; margin: 8px 0; padding: 0; }
-.dest-mix li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px dotted var(--rule); align-items: center; }
+/* Wraps rather than clipping: the chip was being cut off at the panel
+   edge, which hid the affordance exactly where it is most useful. */
+.dest-mix li {
+  display: flex; justify-content: space-between; gap: 8px; padding: 4px 0;
+  border-bottom: 1px dotted var(--rule); align-items: center; flex-wrap: wrap;
+}
+.dest-mix li .ladder { flex: 1 1 auto; min-width: 0; }
+.dest-mix li .chip { flex: 0 0 auto; }
 .mix-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
 
 .transfer-block { margin-top: 10px; }
@@ -515,6 +522,246 @@ table.ledger tr.detail-row td { padding: 0; }
 .empty { padding: 40px 20px; text-align: center; color: var(--ink-2); font-family: var(--font-serif); }
 .empty strong { display: block; font-family: var(--font-display); font-size: 17px; margin-bottom: 6px; color: var(--ink); }
 
+/* ---------------- chips ----------------
+   A coded value, everywhere it appears, as a way of asking who else is
+   like this. Built on the .tag shape so a chip and a label read as the
+   same family — the difference is that this one is pressable. */
+
+.chip {
+  display: inline-block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
+  padding: 2px 7px; border: 1px solid var(--rule-strong); color: var(--ink-2);
+  background: var(--paper-raised); white-space: nowrap; cursor: pointer;
+  border-radius: 0; text-align: left;
+}
+.chip:hover { border-color: var(--ink-2); color: var(--ink); }
+.chip.is-on {
+  background: var(--ink); color: var(--paper-raised); border-color: var(--ink);
+}
+.chip.is-on::after { content: ' ×'; opacity: .7; }
+.chip-sm { font-size: 9px; padding: 1px 5px; }
+/* Not a button: there is nothing to filter to. */
+.chip.is-void {
+  cursor: default; border-style: dashed; color: var(--ink-3); background: transparent;
+}
+.chip-row { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+
+.chip.tone-slack:not(.is-on)    { border-left: 3px solid var(--ink-3); }
+.chip.tone-quality:not(.is-on)  { border-left: 3px solid var(--quality); }
+.chip.tone-transfer:not(.is-on) { border-left: 3px solid var(--transfer); }
+.chip.tone-price:not(.is-on)    { border-left: 3px solid var(--claimed); }
+.chip.tone-margin:not(.is-on)   { border-left: 3px solid var(--traced); }
+
+/* ---------------- flow ----------------
+   The reconciliation bar unrolled. Same two marks: solid green for
+   matched, the 45° audit hatch for asserted-but-not-matched. */
+
+.flow-panel {
+  border: 1px solid var(--rule); background: var(--paper-raised);
+  padding: 18px 20px 14px; margin: 0 0 22px;
+}
+.flow-head h3 { font-family: var(--font-display); font-size: 16px; margin: 0 0 4px; }
+.flow-head p { margin: 0 0 6px; max-width: 68ch; }
+.flow-wrap { width: 100%; overflow-x: auto; }
+/* Matches MIN_WIDTH in Sankey.tsx. Changing one without the other
+   puts the labels in the wrong place. */
+.flow-svg { display: block; min-width: 660px; }
+
+.flow-col-head {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .09em;
+  text-transform: uppercase; fill: var(--ink-3); text-anchor: middle;
+}
+.flow-link { fill: none; transition: stroke-opacity .12s linear; }
+.flow-link.is-dim { stroke-opacity: .07 !important; }
+
+.flow-node rect { transition: fill-opacity .12s linear; }
+.flow-node.is-clickable { cursor: pointer; }
+.flow-node.is-clickable:hover rect { fill: var(--ink); }
+.flow-node.is-dim { opacity: .32; }
+.flow-node:focus { outline: none; }
+.flow-node:focus-visible rect { outline: 2px solid var(--gap); outline-offset: 2px; }
+
+/* Labels sit over the ribbons they describe, so they carry a halo of
+   the panel colour. Without it a name over a dense crossing is
+   unreadable exactly where the diagram is busiest. */
+.flow-node-label {
+  pointer-events: none;
+  paint-order: stroke fill;
+  stroke: var(--paper-raised);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+.flow-node-name {
+  font-family: var(--font-display); font-size: 11.5px; fill: var(--ink);
+  dominant-baseline: middle;
+}
+.flow-node-value { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-3); }
+
+.flow-legend {
+  display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0 0;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+}
+.flow-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.flow-exclusions { margin: 10px 0 0; padding-top: 8px; border-top: 1px dotted var(--rule); }
+/* Only where the diagram is wider than the viewport. */
+.flow-scroll-hint { display: none; margin: 6px 0 0; color: var(--ink-3); }
+@media (max-width: 860px) { .flow-scroll-hint { display: block; } }
+.flow-empty {
+  padding: 36px 20px; text-align: center; color: var(--ink-2);
+  border: 1px dashed var(--rule-strong); background: var(--paper);
+}
+.flow-empty strong { display: block; font-family: var(--font-display); font-size: 15px; color: var(--ink); margin-bottom: 6px; }
+.flow-orientation > .eyebrow { display: block; margin: 0 0 10px; }
+
+/* ---------------- pattern grid ---------------- */
+
+.pattern-controls { display: flex; gap: 26px; flex-wrap: wrap; margin: 0 0 18px; }
+.pattern-controls fieldset { border: 0; padding: 0; margin: 0; }
+.pattern-controls legend {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); padding: 0 0 5px;
+}
+.seg {
+  font-family: var(--font-display); font-size: 12px; padding: 4px 10px;
+  border: 1px solid var(--rule-strong); background: var(--paper-raised);
+  color: var(--ink-2); cursor: pointer; margin-right: -1px;
+}
+.seg:hover { color: var(--ink); }
+.seg.is-on { background: var(--ink); color: var(--paper-raised); border-color: var(--ink); }
+.seg:focus-visible { outline: 2px solid var(--gap); outline-offset: 1px; position: relative; }
+
+.pattern-hint {
+  font-family: var(--font-serif); color: var(--ink-2); margin: 0 0 14px;
+  padding: 7px 10px; background: var(--paper-sunk); border-left: 3px solid var(--ink-3);
+}
+
+.pattern-group { margin: 0 0 26px; }
+.pattern-group-head {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--rule-strong); padding-bottom: 5px; margin-bottom: 4px;
+}
+.pattern-group-head h3 { font-family: var(--font-display); font-size: 15px; margin: 0; }
+.pattern-group-head .count { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.pattern-group-head .figure { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); margin-left: auto; }
+.pattern-group-head .figure.is-gap { color: var(--gap); margin-left: 0; }
+.pattern-group-meaning { margin: 0 0 12px; max-width: 76ch; color: var(--ink-2); }
+.pattern-group.is-unknown .pattern-group-head { border-bottom-style: dashed; }
+
+.pattern-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 10px;
+}
+.pattern-card {
+  border: 1px solid var(--rule); background: var(--paper-raised); padding: 8px 9px 9px;
+  transition: opacity .12s linear, border-color .12s linear;
+}
+.pattern-card.is-lit { border-color: var(--ink-2); background: var(--paper); }
+.pattern-card.is-dim { opacity: .3; }
+.pattern-card.is-pinned { border-left: 3px solid var(--claimed); }
+.pattern-card-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+.pattern-name {
+  font-family: var(--font-display); font-size: 13px; color: var(--ink);
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left; line-height: 1.15;
+}
+.pattern-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.pattern-card-figures {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0;
+}
+.pattern-card-figures .mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
+.pattern-card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.pin {
+  margin-left: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1;
+  width: 18px; height: 18px; flex: none; border: 1px solid var(--rule-strong);
+  background: var(--paper); color: var(--ink-2); cursor: pointer;
+}
+.pin:hover { border-color: var(--ink-2); color: var(--ink); }
+.pin.is-on { background: var(--claimed); border-color: var(--claimed); color: var(--paper-raised); }
+.pin-wide {
+  width: auto; height: auto; padding: 2px 8px; font-size: 10px; letter-spacing: .05em;
+  margin-left: 4px;
+}
+
+/* ---------------- sparkline ---------------- */
+
+.spark { display: inline-block; vertical-align: middle; }
+.spark-zero { stroke: var(--rule-strong); stroke-width: 1; stroke-dasharray: 2 2; }
+.spark-line { fill: none; stroke-width: 1.4; }
+.spark-line.is-up, .spark-end.is-up { stroke: var(--traced); }
+.spark-line.is-down, .spark-end.is-down { stroke: var(--gap); }
+.spark-end.is-up { fill: var(--traced); }
+.spark-end.is-down { fill: var(--gap); }
+.spark-none { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.spark-single { font-family: var(--font-mono); font-size: 10px; }
+.spark-single.is-up { color: var(--traced); }
+.spark-single.is-down { color: var(--gap); }
+
+/* ---------------- comparison tray ---------------- */
+
+.shell.has-tray .main { padding-bottom: 240px; }
+.tray {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--paper-raised); border-top: 2px solid var(--ink);
+  padding: 9px 16px 11px; max-height: 46vh; overflow-y: auto;
+}
+.tray-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.tray-head strong { font-family: var(--font-display); font-size: 13px; }
+.tray-rows { list-style: none; margin: 0; padding: 0; }
+/* The bar column is capped rather than elastic. Stretched across a wide
+   screen it pushed every figure to the far edge, so the number and the
+   bar it belongs to stopped reading as one row. */
+.tray-row {
+  display: grid;
+  grid-template-columns: 132px minmax(150px, 360px) 74px 74px 116px 34px 62px 56px 22px;
+  justify-content: start;
+  align-items: center; gap: 10px; padding: 3px 0;
+  border-top: 1px dotted var(--rule);
+}
+.tray-row:first-child { border-top: 0; }
+.tray-name {
+  font-family: var(--font-display); font-size: 12px; color: var(--ink);
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.tray-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.tray-figure { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+.tray-figure.is-gap { color: var(--gap); }
+.tray-dest { font-family: var(--font-display); font-size: 11px; color: var(--ink-2); }
+.tray-dest em { color: var(--ink-3); }
+.tray-cond, .tray-margin { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+.tray-remove {
+  border: 1px solid var(--rule-strong); background: var(--paper); color: var(--ink-2);
+  width: 20px; height: 20px; line-height: 1; cursor: pointer; font-size: 13px;
+}
+.tray-remove:hover { border-color: var(--gap); color: var(--gap); }
+.tray-missing { margin: 6px 0 0; color: var(--ink-3); }
+
+/* ---------------- similar companies ---------------- */
+
+.company-similar { margin: 22px 0; }
+.company-similar h3 { font-family: var(--font-display); font-size: 15px; margin: 0 0 4px; }
+.similar-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.similar-list li {
+  display: grid; grid-template-columns: 150px 190px minmax(80px, 1fr) 74px 56px;
+  align-items: center; gap: 12px; padding: 5px 0; border-top: 1px dotted var(--rule);
+}
+.similar-name {
+  font-family: var(--font-display); font-size: 13px; color: var(--ink);
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.similar-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.similar-why { font-family: var(--font-serif); font-size: 12px; color: var(--ink-3); }
+.similar-figure { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+
+/* ---------------- keyboard ---------------- */
+
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 50;
+  background: var(--ink); color: var(--paper-raised); padding: 8px 14px;
+  font-family: var(--font-display); font-size: 13px;
+}
+.skip-link:focus { left: 0; }
+
+:focus-visible { outline: 2px solid var(--gap); outline-offset: 2px; }
+
 /* ---------------- responsive ---------------- */
 
 @media (max-width: 1080px) {
@@ -539,8 +786,39 @@ table.ledger tr.detail-row td { padding: 0; }
   .company-row { grid-template-columns: 1fr 80px; }
   .company-row .col-dest { display: none; }
   .doc-list > div { grid-template-columns: 1fr; gap: 2px; }
+
+  /* The tray becomes a stack: the grid columns stop being comparable
+     below this width, and an unreadable comparison is worse than a
+     taller one. */
+  .tray { max-height: 52vh; }
+  .tray-row {
+    grid-template-columns: 1fr auto; grid-template-areas:
+      'name remove' 'bar bar' 'figures figures';
+    gap: 4px; padding: 7px 0;
+  }
+  .tray-row .tray-name { grid-area: name; }
+  .tray-row .tray-remove { grid-area: remove; }
+  .tray-row .gapbar { grid-area: bar; }
+  .tray-row .tray-dest, .tray-row .tray-cond,
+  .tray-row .tray-margin, .tray-row .spark { display: none; }
+  .tray-figure { text-align: left; }
+  .shell.has-tray .main { padding-bottom: 300px; }
+
+  .similar-list li { grid-template-columns: 1fr; gap: 3px; }
+  .similar-figure { text-align: left; }
+  .pattern-controls { gap: 16px; }
+  .pattern-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .pattern-grid { grid-template-columns: 1fr 1fr; }
+  .pattern-group-head .figure { margin-left: 0; }
+  .flow-panel { padding: 14px 12px 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  /* Dimming is how the flow answers a hover, so it stays — it just
+     arrives at once instead of fading. */
+  .flow-link, .flow-node rect, .pattern-card { transition: none !important; }
 }

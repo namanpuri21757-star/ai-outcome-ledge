@@ -9,6 +9,10 @@ import { GapBar } from '../components/GapBar';
 import { ClaimCard } from '../components/ClaimCard';
 import { ConditionFlags } from '../components/ConditionFlags';
 import { DestinationLadder } from '../components/DestinationLadder';
+import { Chip } from '../components/Chip';
+import { Sparkline } from '../components/Sparkline';
+import type { Filters } from '../lib/filters';
+import { marginSeries, relatedSlugs, relationReason } from '../lib/patterns';
 
 /* ===================================================================
    THE COMPANY PAGE
@@ -29,11 +33,16 @@ import { DestinationLadder } from '../components/DestinationLadder';
    =================================================================== */
 
 export function CompanyView({
-  profile, context, max, onCompany, onBack,
+  profile, allProfiles, context, max, filters, onFilters, pinned, onTogglePin, onCompany, onBack,
 }: {
   profile: CompanyProfile | null;
+  allProfiles: CompanyProfile[];
   context: string | null;
   max: number;
+  filters: Filters;
+  onFilters: (f: Filters) => void;
+  pinned: string[];
+  onTogglePin: (slug: string) => void;
   onCompany: (slug: string) => void;
   onBack: () => void;
 }) {
@@ -85,6 +94,14 @@ export function CompanyView({
           {p.ticker && <span className="tag">{p.ticker}</span>}
           <span className="tag">{p.isPublic ? 'Public filer' : 'Private'}</span>
           <span className="tag">{p.rows.length} row{p.rows.length === 1 ? '' : 's'}</span>
+          <button
+            type="button"
+            className={'pin pin-wide' + (pinned.includes(p.slug) ? ' is-on' : '')}
+            aria-pressed={pinned.includes(p.slug)}
+            onClick={() => onTogglePin(p.slug)}
+          >
+            {pinned.includes(p.slug) ? 'Pinned to compare' : 'Pin to compare'}
+          </button>
         </div>
       </header>
 
@@ -149,6 +166,12 @@ export function CompanyView({
                     {m.rows} claim{m.rows === 1 ? '' : 's'}
                     {m.claimedUsd > 0 ? ` · ${usd(m.claimedUsd)}` : ''}
                   </span>
+                  <Chip
+                    small
+                    target={{ kind: 'destination', rank: m.rank }}
+                    filters={filters}
+                    onChange={onFilters}
+                  />
                 </li>
               ))}
             </ul>
@@ -168,8 +191,18 @@ export function CompanyView({
                 ? 'All three met. This is the combination the hypothesis says is required to keep a gain as profit.'
                 : `${p.conditionsPassed} of 3 met. The hypothesis says this produces operational improvement without a profit effect.`}
           </p>
+          {p.conditionsPassed !== null && (
+            <Chip
+              small
+              target={{ kind: 'conditionCount', count: p.conditionsPassed }}
+              filters={filters}
+              onChange={onFilters}
+            />
+          )}
         </div>
       </section>
+
+      <SimilarCompanies profile={p} allProfiles={allProfiles} max={max} onCompany={onCompany} />
 
       {(p.counterparties.length > 0 || p.absorbedFrom.length > 0) && (
         <section className="company-transfers">
@@ -242,6 +275,87 @@ export function CompanyView({
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * The connective tissue between one company and the shape of the whole
+ * dataset.
+ *
+ * A reader who has just learned that IBM's gains were absorbed as slack
+ * should be one click from the other companies that ended up in the
+ * same place, because the repetition is the finding. The reason each
+ * company is here is stated rather than implied — the two axes are
+ * destination and condition count, and a card that matched on only one
+ * of them should say which.
+ */
+export function SimilarCompanies({
+  profile, allProfiles, max, onCompany,
+}: {
+  profile: CompanyProfile;
+  allProfiles: CompanyProfile[];
+  max: number;
+  onCompany: (slug: string) => void;
+}) {
+  const similar = useMemo(() => {
+    const slugs = relatedSlugs(profile, allProfiles);
+    return allProfiles
+      .filter((p) => slugs.has(p.slug))
+      .sort((a, b) => b.claimedUsd - a.claimedUsd)
+      .slice(0, 8);
+  }, [profile, allProfiles]);
+
+  if (profile.dominantDestination === null && profile.conditionsPassed === null) {
+    return (
+      <section className="company-similar">
+        <h3>Similar companies</h3>
+        <p className="small">
+          This company has neither a coded destination nor a complete set of conditions, so there
+          is nothing to match it against yet. That is a gap in the coding, not a finding about
+          the company.
+        </p>
+      </section>
+    );
+  }
+
+  if (similar.length === 0) {
+    return (
+      <section className="company-similar">
+        <h3>Similar companies</h3>
+        <p className="small">
+          No other company in the current selection shares this one's destination or condition
+          count. Clearing the filters may widen the comparison.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="company-similar">
+      <div className="section-head">
+        <h3>Similar companies</h3>
+        <p className="small">
+          Others that landed in the same place, or that meet the same number of the three
+          conditions.
+        </p>
+      </div>
+
+      <ul className="similar-list">
+        {similar.map((s) => (
+          <li key={s.slug}>
+            <button type="button" className="similar-name" onClick={() => onCompany(s.slug)}>
+              {s.name}
+            </button>
+            <span className="similar-why">{relationReason(profile, s)}</span>
+            <GapBar claimed={s.claimedUsd} traced={s.tracedUsd} max={max} />
+            <span className="similar-figure mono">
+              {s.claimedUsd > 0 ? usd(s.claimedUsd) : '—'}
+            </span>
+            <Sparkline values={marginSeries(s)} width={54} height={16} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

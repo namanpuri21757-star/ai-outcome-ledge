@@ -47,8 +47,23 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **189** web tests, **102** worker tests, both typechecks silent, build
+Expected: **271** web tests, **102** worker tests, both typechecks silent, build
 clean.
+
+**Look at the screens before you call a UI change done.** The app renders
+against generated rows with no database:
+
+```
+cd web && VITE_FIXTURES=1 npx vite --port 5199   # in one shell
+cd web && npm run shots && npm run a11y          # in another
+```
+
+`npm run shots` writes every view, plus mobile and empty states, to
+`shots/out/` (git-ignored) and fails on a console error. `npm run a11y` checks
+what a screenshot cannot: that tab reaches the flow diagram, Enter on a node
+filters and writes the URL, a pin survives a reload, and nothing transitions
+under reduced motion. The fixtures are synthetic and clearly labelled; they are
+behind `import.meta.env.DEV`, so production builds drop the module entirely.
 
 `npm test` in `worker/` never touches the network. The live check is separate
 and deliberate:
@@ -99,6 +114,25 @@ without a browser. New logic goes there with tests, not inside a `.tsx`.
 
 **One scale for every bar.** `max` is computed once in `App.tsx` and threaded
 down, so two reconciliation bars in different views stay comparable.
+
+**The selection lives in the URL, not in a `useState`.** `route.ts` serialises
+`Filters` and the pinned companies into the hash, and `App.tsx` reads them back
+out of `parseHash`. Every state of this app is therefore a link, and browser
+back steps through selections. Never reintroduce a local filter state: two
+sources of truth for the selection is how a filter survives one click and not
+the next. Only non-default values are written, so a clean view keeps a clean
+URL.
+
+**One ladder order, used everywhere.** `DESTINATION_ORDER` in `labels.ts` is the
+only ordering of destinations. The flow diagram reads top-to-bottom in it and
+the pattern grid stacks its groups in it. If position means one thing in one
+view and another elsewhere, position stops meaning anything.
+
+**The flow diagram is the reconciliation bar unrolled, not a second visual
+language.** Ribbons resolve into the same solid green and the same 45° hatch the
+bar uses. `MIN_WIDTH` in `Sankey.tsx` must equal `.flow-svg { min-width }` — the
+layout is computed from the measured width, so if CSS stretches the element past
+what was measured, every label lands in the wrong place.
 
 ---
 
@@ -160,6 +194,14 @@ claim is false. Several of these claims are audited and true.
   SEC XBRL and are unaffected.** Do not "fix" this by solving the challenge —
   it is the site declining automated access, and the answer is a different
   source, not a workaround.
+
+- **Prices are off the schedule, not deleted** (`PRICES_ON_SCHEDULE` in
+  `worker/src/index.ts`). A daily run would only ask a closed door twenty times.
+  The job is kept, tested and reachable at `/run?job=prices`, and `price_close`
+  stays in `OUTCOME_SERIES` so the observations collected before the wall went
+  up still produce outcomes — "Share price, one year" still reads for the claims
+  that have it. Wiring a new source means one `fetchPrices` implementation and
+  flipping that flag back.
 
 - The collector's outcomes job was writing zero rows because `Db.select` issued
   unbounded requests and PostgREST silently truncates over-cap responses with
