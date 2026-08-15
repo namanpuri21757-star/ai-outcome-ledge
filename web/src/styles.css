@@ -333,17 +333,29 @@ h4 { font-size: 15px; margin: 0 0 4px; }
 /* ---------------- companies index ---------------- */
 
 .companies-controls { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; }
+/* Header and rows share one column definition via --company-cols, so a
+   change to one cannot slide the labels off their own figures. */
+.companies { --company-cols: 2fr 1.3fr 2fr 100px 90px 52px; }
+.company-head {
+  display: grid; grid-template-columns: var(--company-cols);
+  gap: var(--s-4); padding: var(--s-2) var(--s-4);
+  border: 1px solid var(--rule-strong); border-bottom: 0; background: var(--paper-sunk);
+  font-family: var(--font-mono); font-size: var(--t-2xs); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-2);
+}
+.company-head .num { text-align: right; }
+
 .company-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rule-strong); background: var(--paper-raised); }
 .company-list li + li { border-top: 1px solid var(--rule); }
 .company-row {
   appearance: none; background: none; border: 0; width: 100%; text-align: left; cursor: pointer;
-  display: grid; grid-template-columns: 2fr 1.3fr 2fr 100px 90px 50px;
-  gap: 14px; align-items: center; padding: 10px 14px; font: inherit;
+  display: grid; grid-template-columns: var(--company-cols);
+  gap: var(--s-4); align-items: center; padding: var(--s-3) var(--s-4); font: inherit;
 }
 .company-row:hover { background: var(--paper-sunk); }
-.col-name strong { display: block; font-size: 15px; }
-.col-name small { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
-.company-row .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; }
+.col-name strong { display: block; font-size: var(--t-sm); }
+.col-name small { font-family: var(--font-mono); font-size: var(--t-2xs); color: var(--ink-3); }
+.company-row .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; font-size: var(--t-xs); }
 
 /* ---------------- company page ---------------- */
 
@@ -506,6 +518,45 @@ table.ledger tbody tr.is-open { background: var(--paper-sunk); }
 table.ledger tbody tr { cursor: pointer; }
 table.ledger tr.detail-row, table.ledger tr.detail-row:hover { background: var(--paper); cursor: default; }
 table.ledger tr.detail-row td { padding: 0; }
+
+
+/* ---- the table, on a screen too narrow to be one ----
+   Seven columns will not fit a phone, and the four that carry the
+   answer were the four that fell off the right-hand edge. Each row
+   becomes a block carrying its own column names, which come from
+   COLUMNS in LedgerView.tsx via data-label so there is still only one
+   copy of each name. */
+@media (max-width: 900px) {
+  .table-wrap { overflow-x: visible; border: 0; background: none; }
+  table.ledger, table.ledger tbody, table.ledger tr, table.ledger td { display: block; width: 100%; }
+  table.ledger thead { display: none; }
+
+  table.ledger tbody tr {
+    border: 1px solid var(--rule-strong); background: var(--paper-raised);
+    margin-bottom: var(--s-3); padding: var(--s-3) var(--s-4);
+  }
+  table.ledger tbody tr.detail-row { padding: 0; margin-top: calc(var(--s-3) * -1); }
+
+  table.ledger tbody td {
+    border-bottom: 0; padding: var(--s-2) 0;
+    /* 14ch holds the longest label — RECONCILIATION — at the mono
+       size below. Narrower and it ran into its own value. */
+    display: grid; grid-template-columns: 14ch 1fr; gap: var(--s-3); align-items: baseline;
+  }
+  table.ledger tbody td::before {
+    content: attr(data-label);
+    font-family: var(--font-mono); font-size: var(--t-2xs); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  /* The claim itself is the row's headline, not a labelled field. */
+  table.ledger tbody td.claim-cell,
+  table.ledger tbody td.company-cell { display: block; }
+  table.ledger tbody td.claim-cell::before,
+  table.ledger tbody td.company-cell::before { display: none; }
+  table.ledger tbody td.claim-cell { max-width: none; padding-top: 0; }
+  /* Right-aligned figures read as orphans once the column is gone. */
+  table.ledger tbody td.num { text-align: left; }
+}
 
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .claim-cell { max-width: 44ch; }
@@ -790,40 +841,43 @@ table.ledger tr.detail-row td { padding: 0; }
   padding: 7px 10px; background: var(--paper-sunk); border-left: 3px solid var(--ink-3);
 }
 
-.pattern-group { margin: 0 0 26px; }
+.pattern-group { margin: 0 0 var(--s-8); }
 .pattern-group-head {
   display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
   border-bottom: 1px solid var(--rule-strong); padding-bottom: 5px; margin-bottom: 4px;
 }
-.pattern-group-head h3 { font-family: var(--font-display); font-size: 15px; margin: 0; }
-.pattern-group-head .count { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
-.pattern-group-head .figure { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); margin-left: auto; }
+.pattern-group-head h3 { font-family: var(--font-display); font-size: var(--t-lg); margin: 0; }
+.pattern-group-head .count { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-3); }
+.pattern-group-head .figure { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); margin-left: auto; }
 .pattern-group-head .figure.is-gap { color: var(--gap); margin-left: 0; }
-.pattern-group-meaning { margin: 0 0 12px; max-width: 76ch; color: var(--ink-2); }
+.pattern-group-meaning { margin: 0 0 var(--s-4); max-width: 76ch; color: var(--ink-2); }
 .pattern-group.is-unknown .pattern-group-head { border-bottom-style: dashed; }
 
 .pattern-grid {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 10px;
+  /* 184px fitted seven cards across a 1440 viewport, each one holding
+     a name, a bar, two figures and two tags at 11px. Fewer, larger
+     cards read; more, smaller ones are a texture. */
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: var(--s-3);
 }
 .pattern-card {
-  border: 1px solid var(--rule); background: var(--paper-raised); padding: 8px 9px 9px;
-  transition: opacity .12s linear, border-color .12s linear;
+  border: 1px solid var(--rule); background: var(--paper-raised); padding: var(--s-3);
+  transition: opacity var(--motion-fast) linear, border-color var(--motion-fast) linear;
 }
 .pattern-card.is-lit { border-color: var(--ink-2); background: var(--paper); }
 .pattern-card.is-dim { opacity: .3; }
 .pattern-card.is-pinned { border-left: 3px solid var(--claimed); }
-.pattern-card-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+.pattern-card-head { display: flex; align-items: baseline; gap: var(--s-2); margin-bottom: var(--s-2); }
 .pattern-name {
-  font-family: var(--font-display); font-size: 13px; color: var(--ink);
+  font-family: var(--font-display); font-size: var(--t-sm); color: var(--ink);
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left; line-height: 1.15;
 }
 .pattern-name:hover { text-decoration: underline; text-underline-offset: 2px; }
 .pattern-card-figures {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin: var(--s-2) 0;
 }
-.pattern-card-figures .mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
-.pattern-card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.pattern-card-figures .mono { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2); }
+.pattern-card-tags { display: flex; gap: var(--s-1); flex-wrap: wrap; }
 
 .pin {
   margin-left: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1;
@@ -900,7 +954,7 @@ table.ledger tr.detail-row td { padding: 0; }
   align-items: center; gap: 12px; padding: 5px 0; border-top: 1px dotted var(--rule);
 }
 .similar-name {
-  font-family: var(--font-display); font-size: 13px; color: var(--ink);
+  font-family: var(--font-display); font-size: var(--t-sm); color: var(--ink);
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
 }
 .similar-name:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -922,9 +976,27 @@ table.ledger tr.detail-row td { padding: 0; }
 
 @media (max-width: 1080px) {
   .claimcard-body { grid-template-columns: 1fr; }
-  .claimcard-side { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; padding-top: 14px; }
-  .company-row { grid-template-columns: 1.6fr 1fr 90px 80px; }
-  .company-row .col-bar, .company-row .col-rows { display: none; }
+  .claimcard-side { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; padding-top: var(--s-4); }
+
+  /* The row stacks rather than dropping columns. It used to hide the
+     reconciliation bar and the row count outright below this width,
+     which removed the signature element of the whole project from
+     every tablet and phone. */
+  .company-head { display: none; }
+  .company-row {
+    grid-template-columns: 1fr;
+    gap: var(--s-2); align-items: start; padding: var(--s-4);
+  }
+  .company-row > span:not(.col-name) {
+    display: grid; grid-template-columns: 15ch 1fr; gap: var(--s-3); align-items: baseline;
+  }
+  .company-row > span:not(.col-name)::before {
+    content: attr(data-label);
+    font-family: var(--font-mono); font-size: var(--t-2xs); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .company-row .num { text-align: left; }
+  .col-name { margin-bottom: var(--s-2); }
 }
 
 @media (max-width: 900px) {
@@ -963,7 +1035,7 @@ table.ledger tr.detail-row td { padding: 0; }
   .similar-list li { grid-template-columns: 1fr; gap: 3px; }
   .similar-figure { text-align: left; }
   .pattern-controls { gap: 16px; }
-  .pattern-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .pattern-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
 
 @media (max-width: 620px) {

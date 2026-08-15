@@ -14,7 +14,27 @@ import { ClaimCard } from '../components/ClaimCard';
  *
  * Rows open into the same ClaimCard used on the company page, so a claim
  * reads identically wherever you meet it.
+ *
+ * Below `--table-stack` the table stops being a table. A seven-column
+ * grid on a 390px screen scrolled sideways, and everything after the
+ * claim text — the dollar figure, the reconciliation bar, where it
+ * landed, what the margin did — sat off the right-hand edge. Those are
+ * the columns the page exists for. Each row becomes a block instead,
+ * carrying its own column names, and nothing scrolls sideways.
  */
+
+/** Column names, declared once and used for both the header cell and
+ *  the label each cell carries when the table stacks. Two copies of a
+ *  column name is two things to forget to change. */
+const COLUMNS = {
+  company: 'Company',
+  claim: 'Claim',
+  date: 'Date',
+  claimed: 'Claimed',
+  reconciliation: 'Reconciliation',
+  destination: 'Where it landed',
+  margin: 'Margin +1y',
+} as const;
 export function LedgerView({
   rows, max, onCompany,
 }: { rows: LedgerRow[]; max: number; onCompany: (slug: string, context: string) => void }) {
@@ -51,13 +71,13 @@ export function LedgerView({
       <table className="ledger">
         <thead>
           <tr>
-            {head('company_name', 'Company')}
-            <th>Claim</th>
-            {head('claim_date', 'Date', 'num')}
-            {head('claimed_amount_usd', 'Claimed', 'num')}
-            <th>Reconciliation</th>
-            {head('destination', 'Where it landed')}
-            {head('margin_delta_4q_bps', 'Margin +1y', 'num')}
+            {head('company_name', COLUMNS.company)}
+            <th>{COLUMNS.claim}</th>
+            {head('claim_date', COLUMNS.date, 'num')}
+            {head('claimed_amount_usd', COLUMNS.claimed, 'num')}
+            <th>{COLUMNS.reconciliation}</th>
+            {head('destination', COLUMNS.destination)}
+            {head('margin_delta_4q_bps', COLUMNS.margin, 'num')}
           </tr>
         </thead>
         <tbody>
@@ -72,7 +92,7 @@ export function LedgerView({
                   className={open ? 'is-open' : ''}
                   onClick={() => setOpenId(open ? null : r.id)}
                 >
-                  <td className="company-cell">
+                  <td className="company-cell" data-label={COLUMNS.company}>
                     <button
                       type="button"
                       className="linklike"
@@ -82,24 +102,27 @@ export function LedgerView({
                     </button>
                     <span className="grp">{r.sector ?? ''}</span>
                   </td>
-                  <td className="claim-cell">
+                  <td className="claim-cell" data-label={COLUMNS.claim}>
                     <div className="headline">{clip(r.headline, 110)}</div>
                     <div className="meta"><ClaimTags row={r} /></div>
                   </td>
-                  <td className="num">{shortDate(r.claim_date)}</td>
-                  <td className={'num ' + (r.claimed_amount_usd ? '' : 'is-null')}>
+                  <td className="num" data-label={COLUMNS.date}>{shortDate(r.claim_date)}</td>
+                  <td className={'num ' + (r.claimed_amount_usd ? '' : 'is-null')} data-label={COLUMNS.claimed}>
                     {r.claimed_amount_usd ? usd(r.claimed_amount_usd) : '—'}
                   </td>
-                  <td>
+                  <td data-label={COLUMNS.reconciliation}>
                     {r.claimed_amount_usd ? (
                       <GapBar claimed={r.claimed_amount_usd} traced={r.traceable_to_pl_usd} max={max} />
                     ) : (
                       <span className="small is-null">no dollar figure</span>
                     )}
                   </td>
-                  <td><DestinationLadder rank={r.destination} compact /></td>
-                  <td className={'num ' + (r.margin_delta_4q_bps === null ? 'is-null'
-                    : r.margin_delta_4q_bps > 0 ? 'is-traced' : 'is-gap')}>
+                  <td data-label={COLUMNS.destination}><DestinationLadder rank={r.destination} compact /></td>
+                  <td
+                    data-label={COLUMNS.margin}
+                    className={'num ' + (r.margin_delta_4q_bps === null ? 'is-null'
+                      : r.margin_delta_4q_bps > 0 ? 'is-traced' : 'is-gap')}
+                  >
                     {bps(r.margin_delta_4q_bps)}
                   </td>
                 </tr>

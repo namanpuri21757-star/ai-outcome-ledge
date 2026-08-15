@@ -30,7 +30,10 @@ const SHOTS = [
   // case in the real ledger, so it is screenshotted rather than assumed.
   ['company', '#/company/castleford', { width: 1440, height: 1600 }],
   ['company-no-series', '#/company/northwind', { width: 1440, height: 900 }],
+  ['companies', '#/companies', { width: 1440, height: 1300 }],
+  ['companies-mobile', '#/companies', { width: 390, height: 1200 }],
   ['ledger', '#/ledger', { width: 1440, height: 1000 }],
+  ['ledger-mobile', '#/ledger', { width: 390, height: 1200 }],
   ['conditions', '#/conditions', { width: 1440, height: 1000 }],
   ['flow-mobile', '#/flow', { width: 390, height: 1400 }],
   ['patterns-mobile', '#/patterns', { width: 390, height: 1400 }],
