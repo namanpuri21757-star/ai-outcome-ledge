@@ -152,6 +152,42 @@ export function syntheticRows(): LedgerRow[] {
   return rows;
 }
 
+/**
+ * A synthetic operating-margin series.
+ *
+ * The margin chart is the one element that reads from `observations`
+ * rather than from the ledger rows, so under fixtures it used to draw
+ * its own failure state and nothing else. That made the most important
+ * chart in the application the one thing that could not be looked at
+ * before shipping a change to it.
+ *
+ * Roughly a fifth of companies return nothing, because "this company
+ * does not file with the SEC" is a real and common state that the
+ * empty note has to be seen in. One in eight quarters is missing, so
+ * the line's break-on-gap behaviour is exercised too.
+ */
+export function syntheticMargins(slug: string): Array<{ date: string; margin: number | null }> {
+  const seed = [...slug].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const rand = rng(seed);
+
+  if (rand() < 0.2) return [];
+
+  const level = 0.02 + rand() * 0.16;
+  const drift = (rand() - 0.5) * 0.02;
+  const out: Array<{ date: string; margin: number | null }> = [];
+
+  for (let q = 0; q < 20; q += 1) {
+    const year = 2021 + Math.floor(q / 4);
+    const month = [3, 6, 9, 12][q % 4];
+    const day = month === 3 || month === 12 ? 31 : 30;
+    out.push({
+      date: `${year}-${String(month).padStart(2, '0')}-${day}`,
+      margin: rand() < 0.12 ? null : level + drift * q + (rand() - 0.5) * 0.012,
+    });
+  }
+  return out;
+}
+
 /** True only in a local dev server started with VITE_FIXTURES=1. */
 export const useFixtures =
   import.meta.env.DEV && import.meta.env.VITE_FIXTURES === '1';

@@ -9,7 +9,23 @@ import { DestinationLadder } from '../components/DestinationLadder';
  * Forty-five companies, one line each, sortable. The point of this page
  * is that a reader can find a company by name in two seconds without
  * knowing anything about the coding scheme.
+ *
+ * The three right-hand figures used to carry no headings at all, so a
+ * row ended "$898M  +105bp  2" and nothing on the page said that the
+ * last number was how many rows the company has. A footnote two
+ * screens down explained the middle one. Columns are labelled now.
  */
+
+/** One copy of each column name, shared by the header and the labels
+ *  each cell carries once the row stacks on a narrow screen. */
+const COLUMNS = {
+  name: 'Company',
+  destination: 'Where gains landed',
+  reconciliation: 'Reconciliation',
+  claimed: 'Claimed',
+  margin: 'Margin +1y',
+  rows: 'Rows',
+} as const;
 type SortKey = 'claimed' | 'untraced' | 'rows' | 'name' | 'margin';
 
 export function CompaniesView({
@@ -77,6 +93,17 @@ export function CompaniesView({
           Clear the filters above to see the whole ledger.
         </div>
       ) : (
+        <>
+        {/* Not a table: the rows are buttons. The header is a row of
+            the same grid so the labels sit over their own columns. */}
+        <div className="company-head" aria-hidden="true">
+          <span>{COLUMNS.name}</span>
+          <span>{COLUMNS.destination}</span>
+          <span>{COLUMNS.reconciliation}</span>
+          <span className="num">{COLUMNS.claimed}</span>
+          <span className="num">{COLUMNS.margin}</span>
+          <span className="num">{COLUMNS.rows}</span>
+        </div>
         <ul className="company-list">
           {shown.map((p) => (
             <li key={p.slug}>
@@ -86,7 +113,7 @@ export function CompaniesView({
                   <small>{GROUPS[p.groupCode ?? '']?.name ?? 'Unclassified'}{p.sector ? ` · ${p.sector}` : ''}</small>
                 </span>
 
-                <span className="col-dest">
+                <span className="col-dest" data-label={COLUMNS.destination}>
                   {p.dominantDestination !== null ? (
                     <DestinationLadder rank={p.dominantDestination} compact />
                   ) : (
@@ -94,7 +121,7 @@ export function CompaniesView({
                   )}
                 </span>
 
-                <span className="col-bar">
+                <span className="col-bar" data-label={COLUMNS.reconciliation}>
                   {p.claimedUsd > 0 ? (
                     <GapBar claimed={p.claimedUsd} traced={p.tracedUsd} max={max} />
                   ) : (
@@ -102,18 +129,24 @@ export function CompaniesView({
                   )}
                 </span>
 
-                <span className="col-claimed num">{p.claimedUsd > 0 ? usd(p.claimedUsd) : '—'}</span>
+                <span className="col-claimed num" data-label={COLUMNS.claimed}>
+                  {p.claimedUsd > 0 ? usd(p.claimedUsd) : '—'}
+                </span>
 
-                <span className={'col-margin num ' + (p.marginDelta4qBps === null ? 'is-null'
-                  : p.marginDelta4qBps > 0 ? 'is-traced' : 'is-gap')}>
+                <span
+                  data-label={COLUMNS.margin}
+                  className={'col-margin num ' + (p.marginDelta4qBps === null ? 'is-null'
+                    : p.marginDelta4qBps > 0 ? 'is-traced' : 'is-gap')}
+                >
                   {bps(p.marginDelta4qBps)}
                 </span>
 
-                <span className="col-rows num is-null">{p.rows.length}</span>
+                <span className="col-rows num is-null" data-label={COLUMNS.rows}>{p.rows.length}</span>
               </button>
             </li>
           ))}
         </ul>
+        </>
       )}
 
       <p className="note small">

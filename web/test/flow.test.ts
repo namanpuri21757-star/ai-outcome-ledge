@@ -3,6 +3,8 @@ import { row, CORPUS } from './fixtures';
 import {
   buildFlow,
   columnOrder,
+  ladderRungs,
+  namedCompanies,
   selectionForNode,
   type FlowNode,
 } from '../src/lib/flow';
@@ -120,10 +122,130 @@ describe('buildFlow — folding the long tail', () => {
     expect(buildFlow(many, 3).claimedUsd).toBe(total);
   });
 
-  it('does not fold when everyone fits', () => {
+  it('folds the tail on value share even when the count would allow everyone', () => {
+    // 20 companies at 20M down to 1M. A count ceiling of 50 leaves them
+    // all room, but the smallest are a rounding error against the
+    // largest and a lane apiece says otherwise. Naming stops once the
+    // named companies account for most of the money.
     const m = buildFlow(many, 50);
+    expect(m.companiesFolded).toBeGreaterThan(0);
+
+    const named = m.nodes.filter((n) => n.column === 'company' && !n.aggregate);
+    const namedTotal = named.reduce((a, n) => a + n.value, 0);
+    expect(namedTotal / m.claimedUsd).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('does not fold when every company is a comparable size', () => {
+    const even = Array.from({ length: 6 }, (_, i) =>
+      row({
+        ref: `e${i}`,
+        company_slug: `even${i}`,
+        company_name: `Even ${i}`,
+        claimed_amount_usd: 1_000_000,
+        traceable_to_pl_usd: 0,
+        destination: 1,
+      }),
+    );
+    const m = buildFlow(even, 10);
     expect(m.companiesFolded).toBe(0);
     expect(find(m.nodes, 'co:__other__')).toBeUndefined();
+  });
+
+  it('never folds exactly one company, because a lump of one is not a lump', () => {
+    // Five companies where the fifth is small enough for the share rule
+    // to want to drop it. Folding it alone would trade a named lane for
+    // an anonymous one of the same width.
+    const nearly = [
+      ...Array.from({ length: 4 }, (_, i) =>
+        row({
+          ref: `n${i}`,
+          company_slug: `n${i}`,
+          company_name: `N${i}`,
+          claimed_amount_usd: 50_000_000,
+          traceable_to_pl_usd: 0,
+          destination: 1,
+        }),
+      ),
+      row({
+        ref: 'tiny',
+        company_slug: 'tiny',
+        company_name: 'Tiny',
+        claimed_amount_usd: 100_000,
+        traceable_to_pl_usd: 0,
+        destination: 1,
+      }),
+    ];
+    const m = buildFlow(nearly, 10);
+    expect(m.companiesFolded).toBe(0);
+    expect(find(m.nodes, 'co:tiny')).toBeDefined();
+  });
+
+  it('lets a click on the lump reach the companies inside it', () => {
+    const m = buildFlow(many, 3);
+    const lump = find(m.nodes, 'co:__other__')!;
+    expect(lump.aggregate).toBe(true);
+    expect(lump.slugs?.length).toBe(17);
+    expect(selectionForNode(lump)).toEqual({ companies: lump.slugs });
+  });
+});
+
+describe('namedCompanies', () => {
+  const rank = (totals: number[]) =>
+    totals.map((total, i) => [`c${i}`, { name: `C${i}`, total }] as [string, { name: string; total: number }]);
+
+  it('stops once the named companies hold most of the money', () => {
+    const named = namedCompanies(rank([900, 50, 20, 15, 10, 5]), 10);
+    expect(named.has('c0')).toBe(true);
+    expect(named.size).toBeLessThan(6);
+  });
+
+  it('drops a lane too thin to label, even below the share target', () => {
+    // c1 is a tenth of a percent: a hairline carrying a two-line label.
+    const named = namedCompanies(rank([1000, 1, 1, 1, 1]), 10);
+    expect(named.has('c0')).toBe(true);
+    expect(named.has('c1')).toBe(false);
+  });
+
+  it('respects the count ceiling', () => {
+    expect(namedCompanies(rank(Array(30).fill(100)), 4).size).toBe(4);
+  });
+
+  it('names everyone when there is no money at all to rank by', () => {
+    expect(namedCompanies(rank([0, 0, 0]), 10).size).toBe(3);
+  });
+
+  it('names everyone when there is nothing to fold', () => {
+    expect(namedCompanies(rank([100]), 10).size).toBe(1);
+  });
+});
+
+describe('columnOrder — companies rank by size', () => {
+  const co = (id: string, value: number, aggregate = false): FlowNode =>
+    ({ id, column: 'company', label: id, value, aggregate });
+
+  it('puts the largest claimant at the top', () => {
+    const sorted = [co('a', 100), co('b', 900), co('c', 400)]
+      .sort((x, y) => columnOrder(x) - columnOrder(y))
+      .map((n) => n.id);
+    expect(sorted).toEqual(['b', 'c', 'a']);
+  });
+
+  it('puts the folded lump last, however large it is', () => {
+    // It used to sort into insertion order, which placed the aggregate
+    // above every named company.
+    const sorted = [co('other', 9_999, true), co('a', 100), co('b', 900)]
+      .sort((x, y) => columnOrder(x) - columnOrder(y))
+      .map((n) => n.id);
+    expect(sorted).toEqual(['b', 'a', 'other']);
+  });
+
+  it('ranks measurement bases by size too', () => {
+    const basis = (id: string, value: number): FlowNode =>
+      ({ id, column: 'basis', label: id, value });
+    const sorted = [basis('a', 10), basis('b', 90)]
+      .sort((x, y) => columnOrder(x) - columnOrder(y))
+      .map((n) => n.id);
+    expect(sorted).toEqual(['b', 'a']);
   });
 });
 
@@ -192,5 +314,41 @@ describe('selectionForNode', () => {
     expect(
       selectionForNode({ id: 'out:traced', column: 'outcome', label: '', value: 1, traced: true }),
     ).toBeNull();
+  });
+});
+
+describe('ladderRungs — the diagram on a narrow screen', () => {
+  const m = buildFlow(CORPUS);
+
+  it('keeps the one ladder order rather than sorting by size', () => {
+    const ranks = ladderRungs(m).map((r) => r.rank);
+    expect(ranks).toEqual(DESTINATION_ORDER.filter((r) => ranks.includes(r)));
+  });
+
+  it('omits destinations that are not in the selection', () => {
+    const only = buildFlow(CORPUS.filter((r) => r.destination === 1));
+    expect(ladderRungs(only).every((r) => r.rank === 1)).toBe(true);
+  });
+
+  it('agrees with the diagram about every figure', () => {
+    for (const rung of ladderRungs(m)) {
+      const node = m.nodes.find((n) => n.column === 'destination' && n.rank === rung.rank)!;
+      expect(rung.claimed).toBe(node.value);
+      expect(rung.traced).toBeLessThanOrEqual(rung.claimed);
+    }
+  });
+
+  it('totals to the same claimed figure as the diagram', () => {
+    const sum = ladderRungs(m).reduce((a, r) => a + r.claimed, 0);
+    expect(sum).toBeCloseTo(m.claimedUsd, 6);
+  });
+
+  it('totals to the same traced figure as the diagram', () => {
+    const sum = ladderRungs(m).reduce((a, r) => a + r.traced, 0);
+    expect(sum).toBeCloseTo(m.tracedUsd, 6);
+  });
+
+  it('is empty when nothing is selected', () => {
+    expect(ladderRungs(buildFlow([]))).toEqual([]);
   });
 });

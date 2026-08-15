@@ -18,11 +18,22 @@ const OUT = new URL('./out/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/
 const SHOTS = [
   ['flow', '#/flow', { width: 1440, height: 1200 }],
   ['flow-filtered', '#/flow?dest=1', { width: 1440, height: 1100 }],
+  // The held node: the diagram fades around it and the rows behind it
+  // appear alongside rather than below.
+  ['flow-focus', '#/flow?focus=dest%3A5', { width: 1440, height: 1200 }],
+  ['flow-focus-narrow', '#/flow?focus=dest%3A5', { width: 1100, height: 1400 }],
   ['patterns', '#/patterns', { width: 1440, height: 1500 }],
   ['patterns-conditions', '#/patterns?condn=3', { width: 1440, height: 1000 }],
   ['patterns-pinned', '#/patterns?pin=northwind,acme-group,meridian', { width: 1440, height: 1200 }],
-  ['company', '#/company/northwind', { width: 1440, height: 1600 }],
+  // Both halves of the margin panel: a company whose filings produce a
+  // series, and one that files nothing. The empty state is the common
+  // case in the real ledger, so it is screenshotted rather than assumed.
+  ['company', '#/company/castleford', { width: 1440, height: 1600 }],
+  ['company-no-series', '#/company/northwind', { width: 1440, height: 900 }],
+  ['companies', '#/companies', { width: 1440, height: 1300 }],
+  ['companies-mobile', '#/companies', { width: 390, height: 1200 }],
   ['ledger', '#/ledger', { width: 1440, height: 1000 }],
+  ['ledger-mobile', '#/ledger', { width: 390, height: 1200 }],
   ['conditions', '#/conditions', { width: 1440, height: 1000 }],
   ['flow-mobile', '#/flow', { width: 390, height: 1400 }],
   ['patterns-mobile', '#/patterns', { width: 390, height: 1400 }],

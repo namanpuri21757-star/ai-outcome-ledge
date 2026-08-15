@@ -12,6 +12,7 @@ const route = (patch: Partial<Route> = {}): Route => ({
   context: null,
   filters: EMPTY_FILTERS,
   pinned: [],
+  focus: null,
   ...patch,
 });
 
@@ -182,5 +183,33 @@ describe('togglePinned', () => {
 
   it('still un-pins when full, so the tray is never stuck', () => {
     expect(togglePinned(['a', 'b', 'c', 'd'], 'c')).toEqual(['a', 'b', 'd']);
+  });
+});
+
+describe('focus — the held node is part of the link', () => {
+  it('round-trips through the hash', () => {
+    expect(parseHash('#/flow?focus=co%3Aibm').focus).toBe('co:ibm');
+    expect(toHash(route({ focus: 'co:ibm' }))).toContain('focus=co%3Aibm');
+  });
+
+  it('is absent from a clean URL', () => {
+    expect(toHash(route())).toBe('#/flow');
+    expect(parseHash('#/flow').focus).toBeNull();
+  });
+
+  it('survives alongside a selection', () => {
+    const parsed = parseHash('#/flow?dest=1&focus=dest%3A1');
+    expect(parsed.focus).toBe('dest:1');
+    expect(parsed.filters.destinations).toEqual([1]);
+  });
+
+  it('is not carried onto views that cannot show a diagram', () => {
+    // A dead parameter on every company link is litter.
+    expect(toHash(route({ view: 'ledger', focus: 'co:ibm' }))).not.toContain('focus');
+    expect(companyRoute('ibm', null, EMPTY_FILTERS, []).focus).toBeNull();
+  });
+
+  it('treats an empty focus as no focus', () => {
+    expect(parseHash('#/flow?focus=').focus).toBeNull();
   });
 });

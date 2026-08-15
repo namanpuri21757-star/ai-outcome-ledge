@@ -23,7 +23,7 @@ that, it is not a feature.
 
 | Piece | Where | Notes |
 |---|---|---|
-| Frontend | `web/` — Vite + React 18 + TypeScript | Deployed to Cloudflare on push to `main` |
+| Frontend | `web/` — Vite + React 19 + TypeScript | Deployed to Cloudflare on push to `main` |
 | Collector | `worker/` — Cloudflare Worker, cron | Deployed with `npx wrangler deploy` from `worker/` |
 | Data | Supabase Postgres | Schema in `supabase/`, run in the SQL editor |
 
@@ -47,7 +47,7 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **271** web tests, **102** worker tests, both typechecks silent, build
+Expected: **331** web tests, **102** worker tests, both typechecks silent, build
 clean.
 
 **Look at the screens before you call a UI change done.** The app renders
@@ -60,9 +60,10 @@ cd web && npm run shots && npm run a11y          # in another
 
 `npm run shots` writes every view, plus mobile and empty states, to
 `shots/out/` (git-ignored) and fails on a console error. `npm run a11y` checks
-what a screenshot cannot: that tab reaches the flow diagram, Enter on a node
-filters and writes the URL, a pin survives a reload, and nothing transitions
-under reduced motion. The fixtures are synthetic and clearly labelled; they are
+what a screenshot cannot: that tab reaches the flow diagram, that Enter on a
+node holds it and the diagram visibly says so, that Escape lets go, that a held
+node and a pin both survive a reload, that a narrow screen never scrolls
+sideways, and that nothing transitions under reduced motion. The fixtures are synthetic and clearly labelled; they are
 behind `import.meta.env.DEV`, so production builds drop the module entirely.
 
 `npm test` in `worker/` never touches the network. The live check is separate
@@ -114,6 +115,29 @@ without a browser. New logic goes there with tests, not inside a `.tsx`.
 
 **One scale for every bar.** `max` is computed once in `App.tsx` and threaded
 down, so two reconciliation bars in different views stay comparable.
+
+**Every size is a rung on one ramp.** `--t-2xs` … `--t-3xl` in `styles.css`,
+anchored at 14px with a ratio of 1.2, plus a 4px spacing scale (`--s-*`) and
+two motion tokens. Never write a raw `px` font-size in a rule; sizes a pixel
+apart read as noise rather than as hierarchy.
+
+**Labels cannot overlap by construction, not by tuning.** `lib/flowLayout.ts`
+makes the gap between two Sankey nodes equal to the height of one node label,
+so two labels cannot meet however thin the lanes get, and the number of named
+lanes is then whatever that gap allows in the height available. `NAME_SIZE` and
+`VALUE_SIZE` there must stay equal to `.flow-node-name` and `.flow-node-value`
+in the stylesheet.
+
+**A column name is written once.** `LedgerView` and `CompaniesView` each hold a
+`COLUMNS` map used both for the header cell and for the `data-label` the cell
+carries when the layout stacks on a narrow screen. CSS reads it with
+`attr(data-label)` — never hard-code a user-facing name in a stylesheet.
+
+**No view may scroll sideways to reach its answer.** Below their breakpoints
+the flow diagram becomes a ladder (`FlowLadder`), and the ledger table and
+company list become stacked blocks. Dropping columns instead is not an option:
+the ones that fall off the right-hand edge are always the ones carrying the
+reconciliation.
 
 **The selection lives in the URL, not in a `useState`.** `route.ts` serialises
 `Filters` and the pinned companies into the hash, and `App.tsx` reads them back
@@ -174,6 +198,21 @@ claim is false. Several of these claims are audited and true.
 ---
 
 ## Known state
+
+- **React 19, and no chart library.** Recharts pinned the app to React 18 and
+  was drawing the margin series twice, with the two call sites disagreeing
+  about whether margin was a ratio or a percentage. `components/TimeSeriesChart`
+  now draws it once, with the scale and tick arithmetic in `lib/chart.ts`.
+
+- **Astryx was evaluated and rejected on measurement, not taste** (2026-08-15).
+  It is real, MIT, and its type-scale methodology is what this project's ramp
+  is modelled on. But it needs React 19 *and* StyleX, and one `Button` costs
+  +131 kB of CSS and +136 kB of JS, because `astryx.css` is a static stylesheet
+  for the whole system that cannot be tree-shaken — carrying visual defaults
+  this design would then override. shadcn/ui was rejected for the same shape of
+  reason: it would import Tailwind alongside a hand-authored token system to
+  solve problems that were layout and encoding problems, not component
+  problems. If this is revisited, re-measure rather than re-reason.
 
 - **The Worker does not deploy on push, and drifting behind `main` is the
   failure mode to check first.** The pagination fix below sat committed and
