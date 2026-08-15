@@ -36,8 +36,43 @@
   --font-serif:   'IBM Plex Serif', Georgia, serif;
   --font-mono:    'IBM Plex Mono', 'SF Mono', monospace;
 
+  /* ---- type ramp ----
+     One geometric scale, anchored at 14px with a ratio of 1.2, so that
+     every size on screen is a rung rather than a number somebody typed.
+     Sizes were previously chosen per rule: 10, 11, 12, 13, 15, 19, 21
+     all appeared, several of them a pixel apart, which reads as noise
+     rather than as hierarchy.
+
+       14 × 1.2⁻²  ≈ 10     14 × 1.2¹ ≈ 17     14 × 1.2⁴ ≈ 29
+       14 × 1.2⁻¹  ≈ 12     14 × 1.2² ≈ 20     14 × 1.2⁵ ≈ 35
+       14          =  14    14 × 1.2³ ≈ 24                       */
+  --t-2xs: 10px;   /* column heads, eyebrows — tracked, uppercase */
+  --t-xs:  12px;   /* figures in dense rows, secondary chrome */
+  --t-sm:  14px;   /* diagram labels, chips, table body */
+  --t-md:  17px;   /* reading text */
+  --t-lg:  20px;   /* panel headings */
+  --t-xl:  24px;   /* view headings */
+  --t-2xl: 29px;   /* the one number a page exists to say */
+  --t-3xl: 35px;
+
+  /* ---- spacing ----
+     A 4px grid. `--s-4` (16px) is the default gutter; anything that
+     needs to separate two ideas rather than two lines starts at
+     `--s-6`. */
+  --s-1: 4px;   --s-2: 8px;   --s-3: 12px;  --s-4: 16px;
+  --s-5: 20px;  --s-6: 24px;  --s-8: 32px;  --s-10: 40px;
+  --s-12: 48px; --s-16: 64px;
+
+  /* ---- motion ----
+     Every transition in the app resolves to one of these, so that
+     `prefers-reduced-motion` has a single place to switch them off. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-ease: cubic-bezier(.2, .6, .35, 1);
+
   --rail: 214px;
 }
+
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
@@ -588,30 +623,64 @@ table.ledger tr.detail-row td { padding: 0; }
    The reconciliation bar unrolled. Same two marks: solid green for
    matched, the 45° audit hatch for asserted-but-not-matched. */
 
+/* The one number, above the diagram that explains it. Two lines, so
+   the diagram starts inside the first screen rather than below it. */
+.flow-headline { margin: 0 0 var(--s-4); }
+.flow-headline-line {
+  margin: 0 0 var(--s-2); font-size: var(--t-md); color: var(--ink-2);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s-2);
+}
+.flow-headline-line > span { display: inline-flex; align-items: baseline; gap: var(--s-2); }
+.flow-headline-line strong { font-size: var(--t-xl); color: var(--ink); font-weight: 600; }
+.flow-headline-line strong.is-traced { color: var(--traced); }
+.flow-headline-line strong.is-gap { color: var(--gap); }
+.flow-headline-sep { color: var(--ink-3); }
+.flow-headline-note { margin: var(--s-2) 0 0; max-width: 78ch; }
+
+/* Diagram and, when a node is held, the rows behind it — side by side,
+   because the point of a drill-down is to keep the shape it came from
+   in view while reading the detail. */
+.flow-stage { display: grid; grid-template-columns: 1fr; gap: var(--s-4); align-items: start; }
+@media (min-width: 1180px) {
+  .flow-stage.has-focus { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+
 .flow-panel {
   border: 1px solid var(--rule); background: var(--paper-raised);
-  padding: 18px 20px 14px; margin: 0 0 22px;
+  padding: var(--s-5) var(--s-5) var(--s-3); margin: 0 0 var(--s-5);
+  min-width: 0;
 }
-.flow-head h3 { font-family: var(--font-display); font-size: 16px; margin: 0 0 4px; }
-.flow-head p { margin: 0 0 6px; max-width: 68ch; }
 .flow-wrap { width: 100%; overflow-x: auto; }
 /* Matches MIN_WIDTH in Sankey.tsx. Changing one without the other
    puts the labels in the wrong place. */
-.flow-svg { display: block; min-width: 660px; }
+.flow-svg { display: block; min-width: 840px; }
 
 .flow-col-head {
-  font-family: var(--font-display); font-size: 10px; letter-spacing: .09em;
+  font-family: var(--font-display); font-size: var(--t-2xs); letter-spacing: .1em;
   text-transform: uppercase; fill: var(--ink-3); text-anchor: middle;
 }
-.flow-link { fill: none; transition: stroke-opacity .12s linear; }
-.flow-link.is-dim { stroke-opacity: .07 !important; }
 
-.flow-node rect { transition: fill-opacity .12s linear; }
+.flow-link { fill: none; transition: stroke-opacity var(--motion-fast) linear; }
+/* Hover is a preview: everything else steps back a little. */
+.flow-link.is-dim { stroke-opacity: .1 !important; }
+/* Focus is an answer: everything else steps back a lot, so the one
+   path being read is the only thing with any weight on the page. */
+.flow-link.is-muted { stroke-opacity: .05 !important; }
+.flow-link.is-lit { stroke-opacity: 1 !important; }
+
+.flow-node rect { transition: fill var(--motion-fast) linear; }
 .flow-node.is-clickable { cursor: pointer; }
 .flow-node.is-clickable:hover rect { fill: var(--ink); }
-.flow-node.is-dim { opacity: .32; }
+.flow-node.is-dim { opacity: .34; }
+.flow-node.is-muted { opacity: .16; }
 .flow-node:focus { outline: none; }
-.flow-node:focus-visible rect { outline: 2px solid var(--gap); outline-offset: 2px; }
+.flow-node:focus-visible rect { outline: 2px solid var(--claimed); outline-offset: 2px; }
+
+/* The held node keeps a ring, so it is findable again after the eye
+   has gone to the detail list and come back. */
+.flow-node-ring { fill: none; stroke: var(--gap); stroke-width: 2px; }
+.flow-node.is-focused .flow-node-name { font-weight: 600; }
+.flow-node.is-focused .flow-node-value { fill: var(--ink-2); }
 
 /* Labels sit over the ribbons they describe, so they carry a halo of
    the panel colour. Without it a name over a dense crossing is
@@ -620,30 +689,84 @@ table.ledger tr.detail-row td { padding: 0; }
   pointer-events: none;
   paint-order: stroke fill;
   stroke: var(--paper-raised);
-  stroke-width: 3.5px;
+  stroke-width: 4px;
   stroke-linejoin: round;
 }
+/* These two must resolve to NAME_SIZE and VALUE_SIZE in
+   lib/flowLayout.ts, which sizes the gap between nodes from them. */
 .flow-node-name {
-  font-family: var(--font-display); font-size: 11.5px; fill: var(--ink);
+  font-family: var(--font-display); font-size: var(--t-sm); fill: var(--ink);
   dominant-baseline: middle;
 }
-.flow-node-value { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink-3); }
+.flow-node-value { font-family: var(--font-mono); font-size: var(--t-xs); fill: var(--ink-3); }
 
 .flow-legend {
-  display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0 0;
-  font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+  display: flex; gap: var(--s-5); flex-wrap: wrap; margin: var(--s-3) 0 0;
+  font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-2);
 }
-.flow-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.flow-exclusions { margin: 10px 0 0; padding-top: 8px; border-top: 1px dotted var(--rule); }
-/* Only where the diagram is wider than the viewport. */
-.flow-scroll-hint { display: none; margin: 6px 0 0; color: var(--ink-3); }
-@media (max-width: 860px) { .flow-scroll-hint { display: block; } }
+.flow-legend span { display: inline-flex; align-items: center; gap: var(--s-1); }
+
+/* The explanation, present and one click away rather than in front of
+   the diagram it explains. */
+.flow-howto { margin: var(--s-3) 0 0; border-top: 1px dotted var(--rule); padding-top: var(--s-3); }
+.flow-howto summary {
+  cursor: pointer; font-family: var(--font-display); font-size: var(--t-sm);
+  color: var(--claimed); list-style: none; display: inline-flex; align-items: center; gap: var(--s-2);
+}
+.flow-howto summary::-webkit-details-marker { display: none; }
+.flow-howto summary::before { content: '+'; font-family: var(--font-mono); color: var(--ink-3); }
+.flow-howto[open] summary::before { content: '2'; }
+.flow-howto > div { padding-top: var(--s-3); max-width: 74ch; }
+.flow-howto p { margin: 0 0 var(--s-3); }
+
+.flow-exclusions { margin: var(--s-3) 0 0; padding-top: var(--s-2); border-top: 1px dotted var(--rule); }
 .flow-empty {
-  padding: 36px 20px; text-align: center; color: var(--ink-2);
+  padding: var(--s-10) var(--s-5); text-align: center; color: var(--ink-2);
   border: 1px dashed var(--rule-strong); background: var(--paper);
 }
-.flow-empty strong { display: block; font-family: var(--font-display); font-size: 15px; color: var(--ink); margin-bottom: 6px; }
-.flow-orientation > .eyebrow { display: block; margin: 0 0 10px; }
+.flow-empty strong { display: block; font-family: var(--font-display); font-size: var(--t-md); color: var(--ink); margin-bottom: var(--s-2); }
+.flow-orientation > .eyebrow { display: block; margin: 0 0 var(--s-3); }
+
+/* ---------------- the held node ---------------- */
+
+.focus-panel {
+  border: 1px solid var(--rule-strong); background: var(--paper-raised);
+  padding: var(--s-4); align-self: start; min-width: 0;
+}
+.focus-head { border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3); margin-bottom: var(--s-3); }
+.focus-head h3 { font-family: var(--font-display); font-size: var(--t-lg); margin: var(--s-1) 0; }
+.focus-head p { margin: 0 0 var(--s-3); color: var(--ink-3); }
+/* Scrolls rather than growing: a held node with thirty rows behind it
+   should not push the rest of the page off the bottom of the screen. */
+.focus-rows {
+  list-style: none; margin: 0; padding: 0 var(--s-2) 0 0; display: grid; gap: var(--s-3);
+  max-height: 46vh; overflow-y: auto;
+}
+.focus-rows li { display: grid; gap: var(--s-1); font-size: var(--t-xs); }
+.focus-rows .mono { font-size: var(--t-xs); color: var(--ink-2); }
+.focus-apply { margin-top: var(--s-4); width: 100%; }
+
+/* ---------------- the flow on a narrow screen ----------------
+   Below the Sankey's minimum width the same argument is drawn as the
+   reconciliation bar once per destination, in ladder order. */
+
+.flow-ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
+.ladder-rung button {
+  width: 100%; display: grid; gap: var(--s-2); text-align: left;
+  background: none; border: 1px solid transparent; padding: var(--s-3);
+  cursor: pointer; font: inherit;
+}
+.ladder-rung button:hover { background: var(--paper); }
+.ladder-rung.is-focused button { border-color: var(--gap); background: var(--paper); }
+.rung-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); }
+.rung-name { font-family: var(--font-display); font-size: var(--t-sm); color: var(--ink); }
+.rung-value { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--ink); }
+.rung-split {
+  display: flex; justify-content: space-between; gap: var(--s-3);
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+}
+.rung-split .is-traced { color: var(--traced); }
+.rung-split .is-gap { color: var(--gap); }
 
 /* ---------------- pattern grid ---------------- */
 
@@ -850,6 +973,10 @@ table.ledger tr.detail-row td { padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The motion tokens go to zero, which covers every transition that
+     resolves to one of them; the blanket rule catches anything that
+     does not yet. */
+  :root { --motion-fast: 0s; --motion-base: 0s; }
   * { animation: none !important; transition: none !important; }
   /* Dimming is how the flow answers a hover, so it stays — it just
      arrives at once instead of fading. */

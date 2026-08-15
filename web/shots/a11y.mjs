@@ -2,8 +2,9 @@ import { chromium } from '@playwright/test';
 
 /**
  * Checks that cannot be made from a screenshot: does tabbing reach the
- * diagram, does Enter on a node filter the app, does the pin survive a
- * reload, and does anything animate when the reader has asked it not to.
+ * diagram, does Enter on a node hold it and say so, does Escape let go,
+ * does a held node survive a reload, and does anything animate when the
+ * reader has asked it not to.
  */
 
 const BASE = process.env.SHOT_BASE ?? 'http://localhost:5199';
@@ -49,8 +50,56 @@ const browser = await chromium.launch();
     await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const hash = await page.evaluate(() => location.hash);
-    check('Enter filters the app and writes the URL', /[?&](dest|basis|co)=/.test(hash), hash);
+    check('Enter holds the node and writes the URL', /[?&]focus=/.test(hash), hash);
+
+    // The defect this replaced: a click filtered the ledger and left
+    // the diagram looking identical, so nothing told the reader it had
+    // worked. Holding a node must change what is on screen.
+    const muted = await page.locator('.flow-link.is-muted').count();
+    check('the diagram visibly responds to being held', muted > 0, `${muted} muted ribbon(s)`);
+
+    const ring = await page.locator('.flow-node-ring').count();
+    check('the held node is marked', ring === 1, `${ring} ring(s)`);
+
+    const panel = await page.locator('.focus-panel h3').first().textContent();
+    check('the rows behind it appear alongside', !!panel, panel ?? 'no panel');
+
+    const pressed = await page.evaluate(() =>
+      document.activeElement?.closest('.flow-node')?.getAttribute('aria-pressed'));
+    check('the held node reports pressed state', pressed === 'true', `aria-pressed=${pressed}`);
+
+    // Held state is part of the link, so it has to come back.
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(400);
+    const stillHeld = await page.locator('.flow-node-ring').count();
+    check('the held node survives a reload', stillHeld === 1, `${stillHeld} ring(s)`);
+
+    await page.locator('.flow-wrap').click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const cleared = await page.evaluate(() => location.hash);
+    check('Escape lets go', !/focus=/.test(cleared), cleared);
   }
+  await page.close();
+}
+
+// ── the narrow layout shows the answer without panning ───────────────
+{
+  const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+  await page.goto(`${BASE}/#/flow`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+
+  const rungs = await page.locator('.ladder-rung').count();
+  check('a narrow screen gets the ladder, not a clipped diagram', rungs > 0, `${rungs} rung(s)`);
+
+  const overflows = await page.evaluate(() =>
+    document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+  check('nothing forces the page sideways', !overflows);
+
+  // The last column of the Sankey used to be off-screen here, which is
+  // the one thing the page exists to say.
+  const saysTraceable = await page.locator('.rung-split .is-traced').first().textContent();
+  check('the traceable figure is on screen', /traceable/.test(saysTraceable ?? ''), saysTraceable ?? '');
   await page.close();
 }
 
@@ -81,7 +130,7 @@ const browser = await chromium.launch();
   await page.goto(`${BASE}/#/flow`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
   const durations = await page.evaluate(() =>
-    [...document.querySelectorAll('.flow-link, .pattern-card, .flow-node rect')]
+    [...document.querySelectorAll('.flow-link, .pattern-card, .flow-node rect, .ladder-rung button')]
       .map((el) => getComputedStyle(el).transitionDuration)
       .filter((d, i, a) => a.indexOf(d) === i));
   check(

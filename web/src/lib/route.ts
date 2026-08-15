@@ -56,6 +56,15 @@ export interface Route {
   filters: Filters;
   /** Companies pinned to the comparison tray. */
   pinned: string[];
+  /**
+   * The flow node the reader has committed to, as a node id.
+   *
+   * In the URL rather than in a useState for the same reason the
+   * filters are: a focused diagram is a state worth sending to
+   * someone, and it must survive a reload and step back with the
+   * browser's back button like every other selection does.
+   */
+  focus: string | null;
 }
 
 export const HOME: Route = {
@@ -64,6 +73,7 @@ export const HOME: Route = {
   context: null,
   filters: EMPTY_FILTERS,
   pinned: [],
+  focus: null,
 };
 
 const WITH_ID = new Set<ViewName>(['company', 'finding']);
@@ -138,16 +148,17 @@ export function parseHash(hash: string): Route {
   const filters = parseFilters(q);
   const pinned = list(q.get('pin')).slice(0, MAX_PINNED);
   const context = q.get('from') ?? null;
+  const focus = q.get('focus') || null;
 
   const id = WITH_ID.has(view) ? (parts[1] ?? null) : null;
   // A company route with no slug is meaningless; send it to the index
   // rather than rendering an empty page.
-  if (view === 'company' && !id) return { view: 'companies', id: null, context: null, filters, pinned };
+  if (view === 'company' && !id) return { view: 'companies', id: null, context: null, filters, pinned, focus: null };
   // The findings page's written analysis now lives under the diagram.
   // The old link still has to land somewhere sensible.
-  if (view === 'findings') return { view: 'flow', id: null, context, filters, pinned };
+  if (view === 'findings') return { view: 'flow', id: null, context, filters, pinned, focus };
 
-  return { view, id, context, filters, pinned };
+  return { view, id, context, filters, pinned, focus };
 }
 
 export function toHash(route: Route): string {
@@ -159,6 +170,9 @@ export function toHash(route: Route): string {
   if (route.context) q.set('from', route.context);
   serializeFilters(route.filters, q);
   if (route.pinned.length) q.set('pin', route.pinned.slice(0, MAX_PINNED).join(','));
+  // Only meaningful on the diagram; carrying it onto a company page
+  // would leave a dead parameter in every link from there on.
+  if (route.focus && route.view === 'flow') q.set('focus', route.focus);
 
   const qs = q.toString();
   return qs ? `${base}?${qs}` : base;
@@ -176,7 +190,7 @@ export function companyRoute(
   filters: Filters,
   pinned: string[],
 ): Route {
-  return { view: 'company', id: slug, context: context ?? null, filters, pinned };
+  return { view: 'company', id: slug, context: context ?? null, filters, pinned, focus: null };
 }
 
 /** Toggle a company in and out of the comparison tray, capped. */

@@ -131,7 +131,7 @@ export default function App() {
 
   // Every navigation carries the selection with it, because a filter
   // that survives one click and not the next is worse than no filter.
-  const go = (view: ViewName) => navigate({ view, id: null, context: null, filters, pinned });
+  const go = (view: ViewName) => navigate({ view, id: null, context: null, filters, pinned, focus: null });
   const setFilters = (next: Filters) =>
     navigate({ ...route, filters: next });
   const openCompany = (slug: string, context?: string) =>
@@ -140,14 +140,18 @@ export default function App() {
   // reproduces exactly the question it answers rather than intersecting
   // it with whatever was already in force.
   const openFinding = (f: Finding) =>
-    navigate({ view: 'finding', id: f.id, context: null, filters: f.filter, pinned });
+    navigate({ view: 'finding', id: f.id, context: null, filters: f.filter, pinned, focus: null });
   const onTogglePin = (slug: string) =>
     navigate({ ...route, pinned: togglePinned(pinned, slug) });
 
   const onFlowSelect = (node: FlowNode) => {
     const patch = selectionForNode(node);
-    if (patch) setFilters({ ...filters, ...patch });
+    // Carrying a node's selection out to every other view drops the
+    // focus with it: the reader has asked to leave the diagram behind.
+    if (patch) navigate({ ...route, filters: { ...filters, ...patch }, focus: null });
   };
+
+  const onFocus = (id: string | null) => navigate({ ...route, focus: id });
 
   const current = NAV.find((n) => n.view === route.view);
   const finding = route.view === 'finding' ? findingById(route.id ?? '') : null;
@@ -254,6 +258,8 @@ export default function App() {
             onSelect={onFlowSelect}
             onOpenFinding={openFinding}
             onCompany={openCompany}
+            focus={route.focus}
+            onFocus={onFocus}
           />
         )}
 

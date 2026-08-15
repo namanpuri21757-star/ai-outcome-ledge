@@ -48,8 +48,11 @@ export interface FlowNode {
   slug?: string;
   /** Measurement basis key, when this node is one basis. */
   basisKey?: MeasurementBasis;
-  /** True for the aggregated "N other companies" node, which is not clickable. */
+  /** True for the aggregated "N other companies" node. */
   aggregate?: boolean;
+  /** Every company folded into the aggregate node, so a click on it
+   *  filters to exactly those rather than doing nothing. */
+  slugs?: string[];
   /** The traced/untraced terminals, which carry the hatch. */
   traced?: boolean;
 }
@@ -76,9 +79,31 @@ export interface FlowModel {
   companiesFolded: number;
 }
 
-/** Named companies in the first column before the tail is folded up.
- *  Beyond this the column stops being readable and starts being a wall. */
-export const MAX_NAMED_COMPANIES = 12;
+/** Hard ceiling on named lanes, whatever the height allows. Past this
+ *  the column stops being a ranking and starts being a wall. */
+export const MAX_NAMED_COMPANIES = 10;
+
+/**
+ * Share of claimed dollars the named lanes should account for.
+ *
+ * A count threshold was the wrong instrument. It fired at twelve
+ * companies, and the live ledger has about ten carrying a dollar
+ * figure, so it never fired at all: a company claiming $50M got the
+ * same lane, the same label and the same two lines of type as one
+ * claiming $4.26B. Naming companies until they account for most of the
+ * money is the question a reader actually has — who is most of this? —
+ * and it answers with however many companies that takes.
+ */
+export const NAMED_VALUE_SHARE = 0.85;
+
+/**
+ * The smallest lane worth naming, as a fraction of the total.
+ *
+ * Below this a lane is thinner than its own label, so the label has to
+ * be positioned away from the thing it names and the diagram starts
+ * lying about where the money is.
+ */
+export const MIN_LANE_SHARE = 0.015;
 
 const ORDER_INDEX = new Map(DESTINATION_ORDER.map((rank, i) => [rank, i]));
 
@@ -86,6 +111,17 @@ const ORDER_INDEX = new Map(DESTINATION_ORDER.map((rank, i) => [rank, i]));
  *  has to apply the same order and it must not drift from this file. */
 export function columnOrder(node: FlowNode): number {
   if (node.column === 'destination') return ORDER_INDEX.get(node.rank ?? 0) ?? 99;
+  // Companies rank by size, largest at the top, with the folded lump
+  // last. Left unsorted, d3-sankey kept insertion order — which is the
+  // order rows happened to arrive in — so the aggregate node sat above
+  // every named company and the largest single claimant sat at the
+  // bottom. Size and position disagreed, and position wins that
+  // argument every time in a diagram whose whole subject is magnitude.
+  if (node.column === 'company') return node.aggregate ? Infinity : -(node.value ?? 0);
+  // Bases rank by size too. Nothing is encoded by their order, so the
+  // only job left is to keep the thick ribbons from crossing the thin
+  // ones more than they have to.
+  if (node.column === 'basis') return -(node.value ?? 0);
   // Untraced above traced, mirroring the ladder beside it: the
   // destinations furthest from profit sit at the top and are the ones
   // that end up untraceable, while "kept as margin" sits at the bottom
@@ -95,6 +131,52 @@ export function columnOrder(node: FlowNode): number {
   // as the two clean streams it actually is.
   if (node.column === 'outcome') return node.traced ? 1 : 0;
   return 0;
+}
+
+/**
+ * Which companies get their own lane.
+ *
+ * Three rules, applied in order, all of them about legibility rather
+ * than importance:
+ *
+ *   1. Take companies largest-first until they account for
+ *      `NAMED_VALUE_SHARE` of the claimed total. That is the answer to
+ *      "who is most of this money", which is the question the column
+ *      exists to answer.
+ *   2. Never name more than `maxNamed`, which the caller derives from
+ *      the height actually available. A lane the reader cannot label
+ *      is not a lane.
+ *   3. Never name a company whose lane would be thinner than
+ *      `MIN_LANE_SHARE`, even if rule 1 has not been satisfied yet.
+ *      A hairline with a two-line label attached is worse than being
+ *      inside the lump, because it claims a precision the pixel does
+ *      not have.
+ *
+ * Folding one company into a node called "1 other company" is pure
+ * loss: same clutter, less information, and a lump that is not a lump.
+ * So a fold of one is undone.
+ */
+export function namedCompanies(
+  ranked: Array<[string, { name: string; total: number }]>,
+  maxNamed: number,
+): Set<string> {
+  const total = ranked.reduce((sum, [, c]) => sum + c.total, 0);
+  if (total <= 0) return new Set(ranked.map(([slug]) => slug));
+
+  const named = new Set<string>();
+  let running = 0;
+
+  for (const [slug, co] of ranked) {
+    if (named.size >= maxNamed) break;
+    if (co.total / total < MIN_LANE_SHARE) break;
+    named.add(slug);
+    running += co.total;
+    if (running / total >= NAMED_VALUE_SHARE) break;
+  }
+
+  // A lump of one is not a lump.
+  if (ranked.length - named.size === 1) named.add(ranked[ranked.length - 1][0]);
+  return named;
 }
 
 export function buildFlow(rows: LedgerRow[], maxNamed = MAX_NAMED_COMPANIES): FlowModel {
@@ -112,12 +194,18 @@ export function buildFlow(rows: LedgerRow[], maxNamed = MAX_NAMED_COMPANIES): Fl
     cur.total += r.claimed_amount_usd ?? 0;
     byCompany.set(r.company_slug, cur);
   }
-  const ranked = [...byCompany.entries()].sort((a, b) => b[1].total - a[1].total);
-  const named = new Set(ranked.slice(0, maxNamed).map(([slug]) => slug));
+  const ranked = [...byCompany.entries()].sort(
+    // Name as the tiebreak, so the same dataset always folds the same
+    // companies and a screenshot diff means a layout change.
+    (a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name),
+  );
+  const named = namedCompanies(ranked, maxNamed);
   const companiesFolded = Math.max(0, ranked.length - named.size);
 
   const nodes = new Map<string, FlowNode>();
   const links = new Map<string, FlowLink>();
+
+  const foldedSlugs = ranked.filter(([slug]) => !named.has(slug)).map(([slug]) => slug);
 
   const addNode = (n: FlowNode) => {
     const cur = nodes.get(n.id);
@@ -162,6 +250,7 @@ export function buildFlow(rows: LedgerRow[], maxNamed = MAX_NAMED_COMPANIES): Fl
       value: claimed,
       slug: isNamed ? r.company_slug : undefined,
       aggregate: !isNamed,
+      slugs: isNamed ? undefined : foldedSlugs,
     });
     addNode({
       id: basisId,
@@ -217,7 +306,14 @@ export interface FlowSelection {
 }
 
 export function selectionForNode(node: FlowNode): FlowSelection | null {
-  if (node.column === 'company') return node.slug ? { companies: [node.slug] } : null;
+  if (node.column === 'company') {
+    if (node.slug) return { companies: [node.slug] };
+    // The lump opens into exactly the companies inside it, which is
+    // the only way a reader can find out who they were. Returning null
+    // here made the largest node on the diagram the one node that did
+    // nothing when clicked.
+    return node.slugs?.length ? { companies: [...node.slugs] } : null;
+  }
   if (node.column === 'basis') return node.basisKey ? { bases: [node.basisKey] } : null;
   if (node.column === 'destination') return { destinations: [node.rank ?? 0] };
   // The outcome column is a property of each row's arithmetic rather
