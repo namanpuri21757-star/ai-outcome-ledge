@@ -23,15 +23,25 @@ that, it is not a feature.
 
 | Piece | Where | Notes |
 |---|---|---|
-| Frontend | `web/` — Vite + React 19 + TypeScript | Deployed to Cloudflare on push to `main` |
+| Frontend | `web/` — Vite + React 19 + TypeScript | `npm run deploy` from `web/`. **Not** on push |
 | Collector | `worker/` — Cloudflare Worker, cron | Deployed with `npx wrangler deploy` from `worker/` |
 | Data | Supabase Postgres | Schema in `supabase/`, run in the SQL editor |
 
 Frontend reads the `v_ledger` view at runtime with the anon key. RLS limits anon
 to reading published rows and inserting a submission.
 
-`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are **build-time** variables in
-the Cloudflare dashboard. Changing them requires a new deploy, not just a save.
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are **build-time** variables:
+Vite bakes them into the bundle. Changing them requires a new deploy, not just a
+save — and, more dangerously, *building without them succeeds*. The result is a
+site that loads, renders its own chrome, and asks a hostname that does not exist
+for its data. Before `npm run deploy`, confirm the values are real:
+
+```
+cd web && grep -o 'https://[a-z0-9-]*\.supabase\.co' dist/assets/*.js | sort -u
+```
+
+If that prints `YOUR-PROJECT-REF`, the build is a placeholder build. Do not
+deploy it; it replaces a working site with the config-error state.
 
 **Never put the service-role key anywhere in `web/`.** It belongs only in the
 Worker's Cloudflare secret store.
@@ -198,6 +208,24 @@ claim is false. Several of these claims are audited and true.
 ---
 
 ## Known state
+
+- **Nothing deploys on push. The frontend is a Worker serving static assets,
+  not a Pages project.** `wrangler pages project list` returns nothing for this
+  account, `*.pages.dev` does not resolve, and every deployment on all three
+  Workers reads `Source: wrangler` — there is no build connected to the GitHub
+  repo, and `/accounts/.../builds/workers/<name>` answers 12040, "no build
+  configuration". Pushing to `main` publishes code to GitHub and changes
+  nothing that is serving. Deploy the site with `npm run deploy` from `web/`
+  (config in `web/wrangler.jsonc`) and the collector with `npx wrangler deploy`
+  from `worker/`.
+
+- **There are two frontend Workers and only one of them can be the live one.**
+  `ai-outcome-ledge` and `ai-outcome-ledge1` both carry assets, both are on
+  `*.ai-ledger.workers.dev`, and neither has a custom domain, so nothing in the
+  account distinguishes them. `ai-outcome-ledge1` has the most recent
+  deployment and is what `web/wrangler.jsonc` targets. Confirm that is right
+  and delete the other, or the next person will update the wrong one and
+  believe they have shipped.
 
 - **React 19, and no chart library.** Recharts pinned the app to React 18 and
   was drawing the margin series twice, with the two call sites disagreeing

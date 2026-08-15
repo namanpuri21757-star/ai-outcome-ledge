@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "deploy": "npm run build && wrangler deploy",
     "shots": "node shots/shoot.mjs",
     "a11y": "node shots/a11y.mjs"
   },
@@ -27,6 +28,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.6.3",
     "vite": "^6.4.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.123.0"
   }
 }

@@ -1,0 +1,26 @@
+{
+  // The frontend is a Worker serving static assets, not a Pages project.
+  // That is worth stating plainly because `wrangler pages project list`
+  // returns nothing for this account and `*.pages.dev` does not resolve,
+  // which sends you looking for a Pages deploy that has never existed.
+  //
+  // Until this file, the site was deployed by hand with no configuration
+  // in the repository at all — every deployment on the account reads
+  // `Source: wrangler`, and there is no build connected to the GitHub
+  // repo. Pushing to `main` deploys nothing.
+  //
+  // Deploy with `npm run deploy` from `web/`, which builds first. Read
+  // the warning about build-time variables in CLAUDE.md before you do:
+  // a build made without them is a working site pointed at a hostname
+  // that does not exist.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-outcome-ledge1",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./dist",
+    // Hash routing means the server only ever serves index.html anyway,
+    // but a hard refresh on a path should not 404 if that ever changes.
+    "not_found_handling": "single-page-application"
+  },
+  "observability": { "enabled": true }
+}
