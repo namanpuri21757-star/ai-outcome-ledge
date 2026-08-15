@@ -57,7 +57,7 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **331** web tests, **102** worker tests, both typechecks silent, build
+Expected: **336** web tests, **109** worker tests, both typechecks silent, build
 clean.
 
 **Look at the screens before you call a UI change done.** The app renders
