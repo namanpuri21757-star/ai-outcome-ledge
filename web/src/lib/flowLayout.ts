@@ -122,3 +122,43 @@ export function planFlow({ companies, bases, destinations, ceiling }: FlowPlanIn
 
   return { height, nodePadding: padding, maxNamed: Math.max(1, maxNamed) };
 }
+
+/**
+ * Average glyph width of IBM Plex Sans Condensed at `NAME_SIZE`.
+ *
+ * Condensed faces are narrow; this was measured against the rendered
+ * diagram rather than taken from the metrics, because what matters is
+ * the observed width of real company names, not the font's own average
+ * over glyphs that never appear in one.
+ */
+export const CHAR_W = 6.4;
+
+/** Space between a label and the node it names. */
+export const LABEL_OFFSET = 10;
+
+/** Narrowest sensible gutter, so a diagram of short names is not all margin. */
+export const GUTTER_MIN = 150;
+
+/**
+ * Widest. Past this the labels have taken the chart, and the honest
+ * answer is a smaller type size or a shorter name, not more gutter.
+ */
+export const GUTTER_MAX = 300;
+
+/**
+ * How much room the left-hand labels need.
+ *
+ * A fixed gutter is what clipped "International Business Machines" to
+ * "ternational Business Machines" — which reads as a different company
+ * rather than as a shortened one, and is worse than either wrapping or
+ * an ellipsis because nothing signals that anything was removed. The
+ * gutter is measured off the longest label actually present instead,
+ * so it grows for a dataset that needs it and does not for one that
+ * does not.
+ */
+export function labelGutter(labels: string[], charWidth = CHAR_W): number {
+  const longest = labels.reduce((max, l) => Math.max(max, l.length), 0);
+  if (longest === 0) return GUTTER_MIN;
+  const needed = Math.ceil(longest * charWidth) + LABEL_OFFSET + 8;
+  return Math.min(GUTTER_MAX, Math.max(GUTTER_MIN, needed));
+}

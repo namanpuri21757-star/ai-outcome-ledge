@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  heightForLanes, LABEL_BLOCK, lanesThatFit, MAX_HEIGHT, MIN_HEIGHT, MIN_NODE_H, NAME_SIZE,
-  planFlow, VALUE_SIZE,
+  CHAR_W, GUTTER_MAX, GUTTER_MIN, heightForLanes, LABEL_BLOCK, LABEL_OFFSET, labelGutter,
+  lanesThatFit, MAX_HEIGHT, MIN_HEIGHT, MIN_NODE_H, NAME_SIZE, planFlow, VALUE_SIZE,
 } from '../src/lib/flowLayout';
 
 describe('LABEL_BLOCK', () => {
@@ -103,5 +103,33 @@ describe('planFlow', () => {
 
   it('leaves room for a lane to be visible at all', () => {
     expect(MIN_NODE_H).toBeGreaterThan(0);
+  });
+});
+
+describe('labelGutter', () => {
+  it('fits the longest real company name in the ledger', () => {
+    // The one that was being clipped to "ternational Business Machines".
+    const name = 'International Business Machines';
+    const gutter = labelGutter([name, 'IBM']);
+    expect(gutter).toBeGreaterThanOrEqual(name.length * CHAR_W + LABEL_OFFSET);
+  });
+
+  it('does not spend the gutter when the names are short', () => {
+    expect(labelGutter(['IBM', 'Klarna'])).toBe(GUTTER_MIN);
+  });
+
+  it('grows with the longest label, not the number of labels', () => {
+    const short = labelGutter(Array(40).fill('Acme'));
+    const long = labelGutter(['A company with a very long registered name indeed']);
+    expect(short).toBe(GUTTER_MIN);
+    expect(long).toBeGreaterThan(short);
+  });
+
+  it('refuses to let labels take the whole chart', () => {
+    expect(labelGutter(['x'.repeat(400)])).toBe(GUTTER_MAX);
+  });
+
+  it('survives an empty diagram', () => {
+    expect(labelGutter([])).toBe(GUTTER_MIN);
   });
 });

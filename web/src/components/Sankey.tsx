@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey';
 import type { SankeyGraph, SankeyNode, SankeyLink } from 'd3-sankey';
 import { columnOrder, FLOW_COLUMNS, type FlowModel, type FlowNode, type FlowLink } from '../lib/flow';
+import { LABEL_OFFSET, labelGutter } from '../lib/flowLayout';
 import { usd } from '../lib/format';
 
 /* ===================================================================
@@ -37,7 +38,9 @@ type LayoutLink = SankeyLink<FlowNode, FlowLink>;
 
 const NODE_WIDTH = 13;
 const ROW_MIN = 3;
-const MARGIN = { top: 34, right: 186, bottom: 26, left: 184 };
+/** Left is measured from the labels; see `labelGutter`. A fixed value
+ *  clipped the longest company name the moment the type got bigger. */
+const MARGIN = { top: 34, right: 186, bottom: 26 };
 
 /**
  * Below this the four columns and their labels cannot coexist, so the
@@ -96,7 +99,11 @@ export function Sankey({
     return () => window.removeEventListener('keydown', onKey);
   }, [focusId, onClearFocus]);
 
-  const innerW = Math.max(320, width - MARGIN.left - MARGIN.right);
+  const marginLeft = useMemo(
+    () => labelGutter(model.nodes.filter((n) => n.column !== 'outcome').map((n) => n.label)),
+    [model.nodes],
+  );
+  const innerW = Math.max(320, width - marginLeft - MARGIN.right);
 
   const graph = useMemo<SankeyGraph<FlowNode, FlowLink> | null>(() => {
     if (model.nodes.length === 0 || model.links.length === 0) return null;
@@ -168,7 +175,7 @@ export function Sankey({
           </pattern>
         </defs>
 
-        <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+        <g transform={`translate(${marginLeft},${MARGIN.top})`}>
           {FLOW_COLUMNS.map(({ column, label }) => {
             const first = (graph.nodes as LayoutNode[]).find((n) => n.column === column);
             if (!first) return null;
@@ -264,7 +271,7 @@ export function Sankey({
                   />
                   <text
                     className="flow-node-label"
-                    x={rightHand ? NODE_WIDTH + 10 : -10}
+                    x={rightHand ? NODE_WIDTH + LABEL_OFFSET : -LABEL_OFFSET}
                     y={h / 2}
                     textAnchor={rightHand ? 'start' : 'end'}
                   >
@@ -274,7 +281,7 @@ export function Sankey({
                         "ational Business Machines" reads as a different
                         company rather than as a shortened one. */}
                     <tspan className="flow-node-name">{n.label}</tspan>
-                    <tspan className="flow-node-value" x={rightHand ? NODE_WIDTH + 10 : -10} dy="1.15em">
+                    <tspan className="flow-node-value" x={rightHand ? NODE_WIDTH + LABEL_OFFSET : -LABEL_OFFSET} dy="1.15em">
                       {usd(n.value ?? 0)}
                     </tspan>
                   </text>
