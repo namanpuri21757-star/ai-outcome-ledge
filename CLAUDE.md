@@ -47,8 +47,21 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **131** web tests, **33** worker tests, both typechecks silent, build
+Expected: **189** web tests, **102** worker tests, both typechecks silent, build
 clean.
+
+`npm test` in `worker/` never touches the network. The live check is separate
+and deliberate:
+
+```
+cd worker && npm run smoke
+```
+
+It asks Stooq for one known-good symbol and fails with the real diagnosis if the
+answer is not parseable CSV. Run it before a Worker deploy and whenever the
+collector reports a source-level failure. It is not in the gate on purpose: a
+gate that goes red because a third party is having a bad afternoon stops being
+read.
 
 If a test fails, fix the code — not the test. A test only changes when the
 behaviour it describes was deliberately changed, and then the commit message
@@ -128,6 +141,26 @@ claim is false. Several of these claims are audited and true.
 
 ## Known state
 
+- **The Worker does not deploy on push, and drifting behind `main` is the
+  failure mode to check first.** The pagination fix below sat committed and
+  undeployed for a day while the interface showed the symptoms it had already
+  fixed, and the warning text on screen was the giveaway: it did not exist
+  anywhere in the source tree. When production behaviour contradicts the code,
+  run `npx wrangler deployments list` in `worker/` and compare the last
+  `Source: Upload` against `git log -- worker/` before diagnosing anything else.
+
+- **Stooq stopped serving automated clients (observed 2026-08-15).** Every
+  symbol now returns HTTP 200 with a JavaScript proof-of-work interstitial —
+  it hashes a challenge, posts a nonce to `/__verify`, and reloads. It is
+  served on the first request, on both stooq.com and stooq.pl, with or without
+  a User-Agent, so it is not a rate limit, not a changed URL, and not a wrong
+  ticker. The parser now classifies it as `challenge`, `runPrices` stops at the
+  first one and reports it once, and `npm run smoke` checks it on demand.
+  **Price history is frozen until a price source is chosen; margins come from
+  SEC XBRL and are unaffected.** Do not "fix" this by solving the challenge —
+  it is the site declining automated access, and the answer is a different
+  source, not a workaround.
+
 - The collector's outcomes job was writing zero rows because `Db.select` issued
   unbounded requests and PostgREST silently truncates over-cap responses with
   HTTP 200. Fixed with explicit `Range` pagination. If margins are still blank,
@@ -135,7 +168,10 @@ claim is false. Several of these claims are audited and true.
   often.
 - Teleperformance, Klarna and CBA do not file with the SEC. No margin series is
   possible for them. This is expected, not a bug, and must not be reported as a
-  warning.
+  warning. Enforced in code: the collector tags these with `expected: true` on
+  the `RunError` (a jsonb field, not a schema change), `ok` ignores them, and
+  the health strip lists them under "expected, and not a fault" rather than
+  beside real problems.
 
 ---
 

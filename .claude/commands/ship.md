@@ -15,7 +15,7 @@ small.
    - `cd web && npx tsc --noEmit && npm test && npx vite build`
    - `cd ../worker && npx tsc --noEmit && npm test`
 
-   Expected: 131 web tests, 33 worker tests, silent typechecks, clean build.
+   Expected: 189 web tests, 102 worker tests, silent typechecks, clean build.
    On failure: fix the code, not the test, and re-run the whole gate from the
    top.
 

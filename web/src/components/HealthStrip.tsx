@@ -51,7 +51,8 @@ export function HealthStrip() {
   const outcomesEmpty = outcomes ? (outcomes.rows_written ?? 0) === 0 : false;
 
   const state = last.ok === false ? 'failed' : outcomesEmpty || ageDays > 2 ? 'stale' : 'ok';
-  const warnings = dedupe(runs.flatMap((r) => r.errors ?? []));
+  const { problems, standing } = partitionWarnings(dedupe(runs.flatMap((r) => r.errors ?? [])));
+  const shown = problems.length + standing.length;
 
   return (
     <div className={'health' + (state === 'ok' ? '' : ' ' + state)}>
@@ -66,22 +67,44 @@ export function HealthStrip() {
             The outcomes job wrote no rows, so every measured margin figure is blank.
           </span>
         )}
-        {warnings.length > 0 && (
+        {shown > 0 && (
           <button type="button" className="linklike" onClick={() => setOpen((v) => !v)}>
-            {open ? 'Hide' : 'Show'} {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+            {open ? 'Hide' : 'Show'} {problems.length > 0
+              ? `${problems.length} warning${problems.length === 1 ? '' : 's'}`
+              : 'collector notes'}
           </button>
         )}
       </div>
 
-      {open && warnings.length > 0 && (
-        <ul className="health-warnings">
-          {warnings.map((w) => (
-            <li key={w.scope + w.message}>
-              <code>{w.scope}</code> {w.message}
-              {w.count > 1 && <em> ×{w.count}</em>}
-            </li>
-          ))}
-        </ul>
+      {open && shown > 0 && (
+        <div className="health-detail">
+          {problems.length > 0 && (
+            <ul className="health-warnings">
+              {problems.map((w) => (
+                <li key={w.scope + w.message}>
+                  <code>{w.scope}</code> {w.message}
+                  {occurrenceText(w.count, runs.length) && <em> {occurrenceText(w.count, runs.length)}</em>}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {standing.length > 0 && (
+            <>
+              <p className="health-standing-head">
+                Expected, and not a fault: these companies do not file the data, so the
+                figure reads as a dash rather than a guess.
+              </p>
+              <ul className="health-warnings standing">
+                {standing.map((w) => (
+                  <li key={w.scope + w.message}>
+                    <code>{w.scope}</code> {w.message}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
@@ -91,19 +114,54 @@ export interface CountedWarning {
   scope: string;
   message: string;
   count: number;
+  expected: boolean;
 }
 
 /** The same three warnings repeated once per run read as nine problems.
  *  They are three. */
-export function dedupe(errors: Array<{ scope: string; message: string }>): CountedWarning[] {
+export function dedupe(
+  errors: Array<{ scope: string; message: string; expected?: boolean }>,
+): CountedWarning[] {
   const map = new Map<string, CountedWarning>();
   for (const e of errors) {
     const key = `${e.scope}|${e.message}`;
-    const cur = map.get(key) ?? { scope: e.scope, message: e.message, count: 0 };
+    const cur = map.get(key) ?? { scope: e.scope, message: e.message, count: 0, expected: !!e.expected };
     cur.count += 1;
+    // One run recording it as expected settles it: the condition is a
+    // fact about the company, and an older run that predates the
+    // distinction should not drag it back into the problem list.
+    cur.expected = cur.expected || !!e.expected;
     map.set(key, cur);
   }
   return [...map.values()].sort((a, b) => b.count - a.count || a.scope.localeCompare(b.scope));
+}
+
+/**
+ * Split what someone should act on from what is simply true.
+ *
+ * Teleperformance, Klarna and CBA do not file with the SEC, so no margin
+ * series is possible for them. That is the answer, not a fault, and
+ * listing it beside a real outage teaches the reader to skip both.
+ */
+export function partitionWarnings(warnings: CountedWarning[]): {
+  problems: CountedWarning[];
+  standing: CountedWarning[];
+} {
+  return {
+    problems: warnings.filter((w) => !w.expected),
+    standing: warnings.filter((w) => w.expected),
+  };
+}
+
+/**
+ * A repeated warning is one standing condition, not N incidents.
+ *
+ * "×4" read as four failures. It was one unchanged fact, observed in
+ * four consecutive runs.
+ */
+export function occurrenceText(count: number, runsScanned: number): string | null {
+  if (count <= 1) return null;
+  return `in ${count} of the last ${runsScanned} runs`;
 }
 
 function relative(iso: string): string {

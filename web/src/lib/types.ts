@@ -94,6 +94,8 @@ export interface FetchRun {
   ok: boolean | null;
   companies_attempted: number;
   rows_written: number;
-  errors: Array<{ scope: string; message: string }>;
+  /** `expected` marks a permanent fact about a company — a non-SEC filer
+   *  with no possible margin series — rather than a fault in the run. */
+  errors: Array<{ scope: string; message: string; expected?: boolean }>;
   notes: string | null;
 }

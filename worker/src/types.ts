@@ -54,6 +54,16 @@ export interface ObservationRow {
 export interface RunError {
   scope: string;
   message: string;
+  /**
+   * A permanent, known fact about a company rather than a fault in the
+   * run — a foreign filer that will never publish us-gaap tags, say.
+   * These are recorded, because silently dropping a company is how a
+   * gap becomes invisible, but they do not make a run unhealthy and
+   * they are not counted as problems in the interface.
+   *
+   * `errors` is a jsonb column, so this needs no schema change.
+   */
+  expected?: boolean;
 }
 
 export interface RunResult {

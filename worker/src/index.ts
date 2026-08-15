@@ -1,7 +1,7 @@
 import type { Company, Env, ObservationRow, RunError, RunResult } from './types';
 import { Db } from './db';
 import { SEC_TICKER_MAP_URL, companyFactsUrl, extractSeries, parseTickerMap, secFetch } from './sec';
-import { fetchPrices } from './stooq';
+import { StooqError, fetchPrices, probeStooq } from './stooq';
 import {
   computeOutcome, computePriceOutcome, toRow, REASON_TEXT,
   type OutcomeReason, type Point,
@@ -101,6 +101,7 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
           scope: c.slug,
           message:
             'Files with the SEC but reports no us-gaap concepts. Usually a foreign private issuer reporting under IFRS; no margin series is possible.',
+          expected: true,
         });
       }
     } catch (err: any) {
@@ -114,7 +115,10 @@ export async function runFundamentals(env: Env): Promise<RunResult> {
     companiesAttempted: withCik.length,
     rowsWritten,
     errors,
-    ok: errors.length === 0,
+    // A company that will never have us-gaap tags is not a failed run.
+    // Counting it as one leaves the pipeline permanently red and trains
+    // the reader to ignore the indicator.
+    ok: errors.every((e) => e.expected),
     notes:
       `${withCik.length} SEC filers processed. ` +
       (noCik.length
@@ -130,13 +134,21 @@ export async function runPrices(env: Env): Promise<RunResult> {
   const db = new Db(env);
   const errors: RunError[] = [];
   let rowsWritten = 0;
+  let attempted = 0;
 
   const companies = await db.select<Company>(
     'companies',
     'select=id,slug,stooq_symbol&stooq_symbol=not.is.null',
   );
 
+  // A failure that is about Stooq rather than about a symbol is true for
+  // every remaining company. Asking twenty more times cannot change the
+  // answer, and listing it twenty times buries the one fact that matters,
+  // so the loop stops and the run reports it once.
+  let sourceLevel: StooqError | null = null;
+
   for (const c of companies) {
+    attempted += 1;
     try {
       const prices = await fetchPrices(c.stooq_symbol!);
       const rows: ObservationRow[] = prices.map((p) => ({
@@ -150,12 +162,35 @@ export async function runPrices(env: Env): Promise<RunResult> {
       }));
       rowsWritten += await db.upsert('observations', rows, OBS_CONFLICT);
     } catch (err: any) {
+      if (err instanceof StooqError && err.isSourceLevel) {
+        sourceLevel = err;
+        break;
+      }
       errors.push({ scope: c.slug, message: String(err?.message ?? err) });
     }
     await sleep(400); // a free courtesy endpoint; do not hammer it
   }
 
-  return { job: 'prices', companiesAttempted: companies.length, rowsWritten, errors, ok: errors.length === 0 };
+  if (sourceLevel) {
+    errors.push({
+      scope: 'stooq',
+      message:
+        `${sourceLevel.message} Stopped after ${attempted} of ${companies.length} symbols; ` +
+        'the remainder were not attempted because the result would be the same.',
+    });
+  }
+
+  return {
+    job: 'prices',
+    companiesAttempted: attempted,
+    rowsWritten,
+    errors,
+    ok: errors.length === 0,
+    notes: sourceLevel
+      ? `Stooq is not serving data (${sourceLevel.kind}). Price history is frozen at its last good run; ` +
+        'margins come from SEC filings and are unaffected.'
+      : `${attempted} symbols fetched from Stooq.`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +301,37 @@ export async function runOutcomes(env: Env): Promise<RunResult> {
   };
 }
 
+/**
+ * Run a job, record it, and keep going if it throws.
+ *
+ * The jobs are independent: margins come from the SEC, prices come from
+ * Stooq, and outcomes are derived from whatever observations exist. A
+ * sequence that aborts on the first exception lets one unavailable source
+ * suppress the two jobs behind it — which is how a Stooq outage could
+ * take the margin figures down with it, even though the SEC was fine.
+ * Partial and visible beats none and silent.
+ */
+async function runStep(db: Db, trigger: string, job: string, fn: () => Promise<RunResult>): Promise<RunResult> {
+  try {
+    return await recordRun(db, trigger, job, fn);
+  } catch (err: any) {
+    return {
+      job,
+      companiesAttempted: 0,
+      rowsWritten: 0,
+      errors: [{ scope: job, message: String(err?.message ?? err) }],
+      ok: false,
+      notes: 'The job threw before it finished. The jobs after it still ran.',
+    };
+  }
+}
+
 export async function runAll(env: Env, trigger: string) {
   const db = new Db(env);
   const results: RunResult[] = [];
-  results.push(await recordRun(db, trigger, 'fundamentals', () => runFundamentals(env)));
-  results.push(await recordRun(db, trigger, 'prices', () => runPrices(env)));
-  results.push(await recordRun(db, trigger, 'outcomes', () => runOutcomes(env)));
+  results.push(await runStep(db, trigger, 'fundamentals', () => runFundamentals(env)));
+  results.push(await runStep(db, trigger, 'prices', () => runPrices(env)));
+  results.push(await runStep(db, trigger, 'outcomes', () => runOutcomes(env)));
   return results;
 }
 
@@ -287,12 +347,15 @@ export default {
     if (missing.length) throw new Error(`Worker is missing secrets: ${missing.join(', ')}`);
 
     const db = new Db(env);
+    // `runStep`, not `recordRun`: the outcomes job is the one that fills
+    // the margin column, and it must still run when the collector ahead
+    // of it could not reach its source.
     if (controller.cron === '30 22 * * 1-5') {
-      await recordRun(db, controller.cron, 'prices', () => runPrices(env));
-      await recordRun(db, controller.cron, 'outcomes', () => runOutcomes(env));
+      await runStep(db, controller.cron, 'prices', () => runPrices(env));
+      await runStep(db, controller.cron, 'outcomes', () => runOutcomes(env));
     } else {
-      await recordRun(db, controller.cron, 'fundamentals', () => runFundamentals(env));
-      await recordRun(db, controller.cron, 'outcomes', () => runOutcomes(env));
+      await runStep(db, controller.cron, 'fundamentals', () => runFundamentals(env));
+      await runStep(db, controller.cron, 'outcomes', () => runOutcomes(env));
     }
   },
 
@@ -306,6 +369,14 @@ export default {
 
     if (url.pathname === '/health') {
       return json({ ok: missingConfig(env).length === 0, missing: missingConfig(env) });
+    }
+
+    // A live check of the one source that fails by returning HTTP 200.
+    // Keyless and side-effect free, so it needs no token: it reads a
+    // public price series and writes nothing.
+    if (url.pathname === '/smoke') {
+      const stooq = await probeStooq(url.searchParams.get('symbol') ?? undefined);
+      return json({ ok: stooq.ok, stooq }, stooq.ok ? 200 : 503);
     }
 
     if (url.pathname === '/run') {
@@ -331,6 +402,7 @@ export default {
       service: 'ai-outcome-ledger worker',
       endpoints: {
         '/health': 'config check, no secrets required',
+        '/smoke?symbol=ibm.us': 'live check that Stooq still serves parseable CSV; 503 when it does not',
         '/run?job=all|fundamentals|prices|outcomes&token=RUN_TOKEN': 'trigger a job now',
       },
     });

@@ -249,6 +249,10 @@ h4 { font-size: 15px; margin: 0 0 4px; }
 .health-warnings { margin: 8px 0 0; padding: 8px 0 0 18px; border-top: 1px dotted var(--rule); }
 .health-warnings li { padding: 2px 0; }
 .health-warnings code { color: var(--ink); }
+/* A standing fact is not a problem, and must not be read as one. */
+.health-standing-head { margin: 10px 0 0; padding-top: 8px; border-top: 1px dotted var(--rule); color: var(--ink-3); }
+.health-warnings.standing { border-top: 0; padding-top: 2px; color: var(--ink-3); }
+.health-warnings.standing code { color: var(--ink-2); }
 
 /* ---------------- findings ---------------- */
 
