@@ -248,16 +248,31 @@ describe('accessibility and layout guarantees', () => {
     }
   });
 
-  it('starts every view at h2, since the masthead owns the h1', () => {
+  // The three cover views render outside the shell, so there is no
+  // masthead above them and the page's own headline is its h1. Every
+  // other view sits under the masthead and starts at h2.
+  const COVERS = ['/views/HomeView.tsx', '/views/ThesisView.tsx', '/views/DirectoryView.tsx'];
+
+  it('starts every shell view at h2, since the masthead owns the h1', () => {
     for (const { file, body } of all) {
-      if (!file.startsWith('/views/')) continue;
+      if (!file.startsWith('/views/') || COVERS.includes(file)) continue;
       expect(body, `${file} declares an h1`).not.toContain('<h1');
+    }
+  });
+
+  it('gives each cover view exactly one h1, since it has no masthead', () => {
+    for (const file of COVERS) {
+      const body = all.find((a) => a.file === file)!.body;
+      // Either a literal h1 or the reveal component rendering as one.
+      const count =
+        (body.match(/<h1[\s>]/g) ?? []).length + (body.match(/tag="h1"/g) ?? []).length;
+      expect(count, `${file} has ${count} h1s`).toBe(1);
     }
   });
 
   it('never writes a heading below h2 before an h2 in the same view', () => {
     for (const { file, body } of all) {
-      if (!file.startsWith('/views/')) continue;
+      if (!file.startsWith('/views/') || COVERS.includes(file)) continue;
       const first = body.search(/<h[23]/);
       if (first === -1) continue;
       expect(body.slice(first, first + 4), file).toMatch(/<h2|<h3/);

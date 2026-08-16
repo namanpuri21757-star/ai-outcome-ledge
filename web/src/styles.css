@@ -924,43 +924,46 @@ p { margin: 0 0 var(--s-3); }
 .form-done { font-size: var(--t-sm); }
 
 /* ===================================================================
-   THE LANDING PAGE
+   THE COVER PAGES — landing, blueprint, directory
 
-   The one dark surface, and the only one that is not a reading surface:
-   nothing is coded here, nothing is compared, and a visitor is on it for
-   seconds. The palette is the ledger's own, inverted — ink becomes the
-   ground and paper becomes the type — so crossing into the ledger reads
-   as turning a cover rather than arriving somewhere else.
+   Three surfaces a visitor meets before any row: what this is, what the
+   argument is, and who is in the record. They are covers rather than
+   reading surfaces — nothing is coded on them and nothing is compared —
+   so they share one dark ground, and crossing into the ledger reads as
+   turning a cover rather than arriving somewhere else.
 
-   The example row keeps its paper. The gap bar is the argument of the
-   whole project and it is drawn in ledger green on audit red against
-   light stock; putting it on the dark ground would mean restyling it,
-   so the row it belongs to is inset as a piece of the ledger instead.
+   The palette is the ledger's own, inverted: ink becomes the ground and
+   paper becomes the type. Nothing new is introduced. The one thing that
+   is adapted rather than reused is the gap bar's ground, at the bottom
+   of this section, and the reason is written there.
    =================================================================== */
 
-.home {
-  --home-ground: #0a1018;
-  --home-ink: #eef1f4;
-  --home-ink-2: #9dacb7;
-  --home-rule: rgba(238, 241, 244, 0.22);
-  --home-rule-strong: rgba(238, 241, 244, 0.38);
+.cover {
+  --cover-ground: #0a1018;
+  --cover-raised: rgba(238, 241, 244, 0.035);
+  --cover-ink: #eef1f4;
+  --cover-ink-2: #9dacb7;
+  --cover-ink-3: #6d7d89;
+  --cover-rule: rgba(238, 241, 244, 0.22);
+  --cover-rule-soft: rgba(238, 241, 244, 0.12);
+  --cover-rule-strong: rgba(238, 241, 244, 0.42);
 
   position: relative;
   min-height: 100vh;
-  background: var(--home-ground);
-  color: var(--home-ink);
+  background: var(--cover-ground);
+  color: var(--cover-ink);
   display: flex;
   flex-direction: column;
 }
 
 /* Fixed rather than absolute: the field is sized to the viewport once,
-   so the picture does not change when the example row loads in under
-   it, and it does not swim while the page scrolls. */
-.home-field, .home-frame {
+   so the picture does not change when a row loads in under it, and it
+   does not swim while the page scrolls. */
+.cover-field, .cover-frame {
   position: fixed;
   pointer-events: none;
 }
-.home-field { inset: 0; z-index: 0; }
+.cover-field { inset: 0; z-index: 0; }
 /* The canvas class comes from the vendored component; its container is
    positioned by its own inline styles. */
 .waves-canvas { display: block; width: 100%; height: 100%; }
@@ -970,18 +973,18 @@ p { margin: 0 0 var(--s-3); }
    paper on every other page is drawn — a hard-stop gradient rather than
    a pseudo-element, because nothing in this stylesheet may set
    `content`, decorative or not. */
-.home-frame {
+.cover-frame {
   inset: var(--s-4);
-  border: 1px solid var(--home-rule);
+  border: 1px solid var(--cover-rule-soft);
   background: repeating-linear-gradient(
     to right,
-    var(--home-rule) 0 1px,
+    var(--cover-rule-soft) 0 1px,
     transparent 1px 33.333%
   );
   z-index: 1;
 }
 
-.home-inner {
+.cover-inner {
   position: relative; z-index: 2;
   width: 100%; max-width: var(--page);
   margin: 0 auto;
@@ -990,32 +993,66 @@ p { margin: 0 0 var(--s-3); }
   flex: 1;
 }
 
-/* ---- top bar ---- */
+/* ---- the bar every cover shares ---- */
 
-.home-bar {
+.cover-bar {
   display: flex; flex-wrap: wrap; align-items: center;
   justify-content: space-between; gap: var(--s-3) var(--s-6);
-  border-bottom: 1px solid var(--home-rule);
+  border-bottom: 1px solid var(--cover-rule);
   padding-bottom: var(--s-4);
 }
-.home-mark {
+.cover-mark {
   background: none; border: 0; padding: 0; cursor: pointer;
   font-family: var(--font-display); font-size: var(--t-sm);
   text-transform: uppercase; letter-spacing: .18em; font-weight: 600;
-  color: var(--home-ink);
+  color: var(--cover-ink);
 }
-.home-nav { display: flex; flex-wrap: wrap; gap: var(--s-1); }
-.home-nav button {
+.cover-nav { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.cover-nav button {
   background: none; border: 1px solid transparent; cursor: pointer;
   font-family: var(--font-display); font-size: var(--t-sm);
   text-transform: uppercase; letter-spacing: .12em;
-  color: var(--home-ink-2); padding: var(--s-2) var(--s-3);
+  color: var(--cover-ink-2); padding: var(--s-2) var(--s-3);
   transition: color var(--motion-fast) var(--motion-ease),
               border-color var(--motion-fast) var(--motion-ease);
 }
-.home-nav button:hover { color: var(--home-ink); border-color: var(--home-rule); }
+.cover-nav button:hover { color: var(--cover-ink); border-color: var(--cover-rule); }
 
-/* ---- the hook ---- */
+/* ---- shared furniture ---- */
+
+.cover-eyebrow {
+  display: flex; align-items: baseline; gap: var(--s-3);
+  font-family: var(--font-display); font-size: var(--t-2xs);
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--cover-ink-2); margin: 0; font-weight: 600;
+}
+.cover-eyebrow-mark {
+  font-family: var(--font-mono); color: var(--cover-ink-3);
+  letter-spacing: .08em;
+}
+.cover-empty { color: var(--cover-ink-2); font-size: var(--t-sm); margin: 0; }
+
+.cover-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin: 0; }
+.cover-cta {
+  font-family: var(--font-display); font-size: var(--t-md);
+  padding: var(--s-3) var(--s-8); cursor: pointer;
+  letter-spacing: .01em;
+  background: var(--cover-ink); color: var(--cover-ground);
+  border: 1px solid var(--cover-ink); font-weight: 600;
+  transition: background var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.cover-cta:hover { background: var(--traced); border-color: var(--traced); color: var(--cover-ink); }
+
+/* The one focus ring in the app is drawn in --claimed, which is a blue
+   meant for paper. On the dark ground it is barely a mark, so the ring
+   changes colour here and only here. It is never removed. */
+.cover :focus-visible { outline-color: var(--cover-ink); }
+
+/* ===================================================================
+   THE LANDING PAGE
+   =================================================================== */
 
 .home-main { display: flex; flex-direction: column; gap: var(--s-5); }
 
@@ -1025,7 +1062,7 @@ p { margin: 0 0 var(--s-3); }
   line-height: 1.04;
   letter-spacing: -0.02em;
   font-weight: 600;
-  color: var(--home-ink);
+  color: var(--cover-ink);
   margin: 0;
   max-width: 26ch;
 }
@@ -1033,97 +1070,349 @@ p { margin: 0 0 var(--s-3); }
 .home-standfirst {
   font-size: var(--t-md);
   line-height: 1.45;
-  color: var(--home-ink-2);
+  color: var(--cover-ink-2);
   max-width: 62ch;
   margin: 0;
 }
 
-/* ---- the example ---- */
+/* ---- the example row ----
+
+   Drawn on the page's own stock, not on a white card. What makes it a
+   distinct block is the hairline rule the whole page is built from and
+   its own mark in the corner, the way a figure is marked on a drawing.
+   The type is the page's type: display for structure, mono for every
+   number. The claim keeps quotation, not a different family. */
 
 .home-example { display: flex; flex-direction: column; gap: var(--s-3); }
-.home-eyebrow {
-  font-family: var(--font-display); font-size: var(--t-2xs);
-  text-transform: uppercase; letter-spacing: .14em;
-  color: var(--home-ink-2); margin: 0; font-weight: 600;
-}
-.home-example-empty { color: var(--home-ink-2); font-size: var(--t-sm); margin: 0; }
 
 .home-card {
-  background: var(--paper-raised);
-  color: var(--ink);
-  border: 1px solid var(--rule-strong);
+  background: var(--cover-raised);
+  border: 1px solid var(--cover-rule);
+  border-left: 2px solid var(--cover-rule-strong);
   padding: var(--s-4) var(--s-5);
-  max-width: 72ch;
-  display: flex; flex-direction: column; gap: var(--s-2);
+  max-width: 76ch;
+  display: flex; flex-direction: column; gap: var(--s-3);
 }
 .home-card-meta {
   display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4);
+  font-family: var(--font-mono);
   font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: .08em;
-  color: var(--ink-3); margin: 0;
+  color: var(--cover-ink-3); margin: 0;
 }
-.home-card-co { color: var(--ink); font-weight: 600; }
+.home-card-co { color: var(--cover-ink); font-weight: 600; }
 .home-card-claim {
-  font-family: var(--font-serif); font-size: var(--t-lg);
-  line-height: 1.35; margin: 0; color: var(--ink);
+  font-family: var(--font-display); font-weight: 500;
+  font-size: var(--t-lg); line-height: 1.35;
+  margin: 0; color: var(--cover-ink);
+  max-width: 46ch;
 }
 .home-card-figures {
   display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-10);
-  border-top: 1px solid var(--rule); padding-top: var(--s-3);
+  border-top: 1px solid var(--cover-rule-soft); padding-top: var(--s-3);
   margin-top: var(--s-1);
 }
 .home-card-fig { display: flex; flex-direction: column; gap: var(--s-1); }
 .home-card-fig-label {
+  font-family: var(--font-mono);
   font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: .08em;
-  color: var(--ink-3);
+  color: var(--cover-ink-3);
 }
-.home-card-fig-value { font-size: var(--t-xl); line-height: 1.1; }
+.home-card-fig-value { font-size: var(--t-xl); line-height: 1.1; color: var(--cover-ink); }
 .home-card-note {
-  font-size: var(--t-sm); color: var(--ink-2); margin: 0; max-width: var(--measure);
+  font-size: var(--t-sm); color: var(--cover-ink-2); margin: 0; max-width: var(--measure);
 }
+.home-card-foot { margin: 0; }
 .home-card-open {
-  align-self: flex-start;
-  background: none; border: 1px solid var(--rule-strong); cursor: pointer;
+  background: none; border: 0; padding: 0; cursor: pointer;
   font-family: var(--font-display); font-size: var(--t-sm);
-  color: var(--ink); padding: var(--s-2) var(--s-4);
-  transition: background var(--motion-fast) var(--motion-ease);
+  color: var(--cover-ink); letter-spacing: .02em;
+  border-bottom: 1px solid var(--cover-rule-strong);
+  transition: border-color var(--motion-fast) var(--motion-ease);
 }
-.home-card-open:hover { background: var(--paper-sunk); }
+.home-card-open:hover { border-color: var(--cover-ink); }
 
-/* ---- the hand-off ---- */
+/* ===================================================================
+   THE BLUEPRINT
+   =================================================================== */
 
-.home-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin: 0; }
-.home-cta, .home-ghost {
-  font-family: var(--font-display); font-size: var(--t-md);
-  padding: var(--s-3) var(--s-8); cursor: pointer;
-  letter-spacing: .01em;
+.thesis-main { display: flex; flex-direction: column; gap: var(--s-6); }
+
+.thesis-title {
+  font-family: var(--font-display);
+  font-size: var(--t-3xl); line-height: 1.06;
+  letter-spacing: -0.02em; font-weight: 600;
+  margin: 0; max-width: 22ch; color: var(--cover-ink);
+}
+
+.thesis-lede {
+  display: grid; gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  max-width: 108ch;
+}
+.thesis-lede p {
+  margin: 0; color: var(--cover-ink-2);
+  font-size: var(--t-sm); line-height: 1.55;
+}
+
+.thesis-standing {
+  margin: 0; max-width: var(--measure);
+  font-size: var(--t-sm); color: var(--cover-ink-3);
+  border-left: 1px solid var(--cover-rule); padding-left: var(--s-4);
+}
+
+/* ---- the sheet ----
+   Drafting paper: a hairline grid, a ruler down two edges, and the
+   stages marked on it. */
+
+.sheet {
+  position: relative;
+  border: 1px solid var(--cover-rule);
+  background-color: rgba(238, 241, 244, 0.02);
+  background-image:
+    repeating-linear-gradient(to right, var(--cover-rule-soft) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(to bottom, var(--cover-rule-soft) 0 1px, transparent 1px 56px);
+  padding: var(--s-8) var(--s-6) var(--s-6) var(--s-10);
+}
+.sheet-ruler {
+  position: absolute;
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  color: var(--cover-ink-3); letter-spacing: .1em;
+  display: flex; justify-content: space-between;
+}
+.sheet-ruler-top {
+  top: var(--s-2); left: var(--s-10); right: var(--s-6);
+}
+.sheet-ruler-side {
+  top: var(--s-8); bottom: var(--s-6); left: var(--s-4);
+  flex-direction: column;
+}
+
+.sheet-stages {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; align-items: stretch;
+}
+.stage { display: flex; align-items: stretch; flex: 1 1 210px; min-width: 0; }
+
+.stage-node {
+  flex: 1; min-width: 0; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: var(--s-1);
+  background: rgba(10, 16, 24, 0.72);
+  border: 1px solid var(--cover-rule);
+  padding: var(--s-4);
+  font-family: var(--font-display); color: var(--cover-ink);
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              background var(--motion-fast) var(--motion-ease);
+}
+.stage-node:hover { border-color: var(--cover-rule-strong); }
+.stage-node.is-open {
+  border-color: var(--cover-ink);
+  background: rgba(238, 241, 244, 0.06);
+}
+.stage-mark {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  letter-spacing: .14em; color: var(--cover-ink-3);
+}
+.stage-title {
+  font-size: var(--t-sm); font-weight: 600; line-height: 1.25;
+  color: var(--cover-ink);
+}
+.stage-figure {
+  font-family: var(--font-mono); font-size: var(--t-2xl);
+  line-height: 1.1; color: var(--cover-ink);
+  font-variant-numeric: tabular-nums;
+  margin-top: var(--s-1);
+}
+.stage-caption {
+  font-size: var(--t-2xs); line-height: 1.45; color: var(--cover-ink-2);
+  text-transform: none; letter-spacing: 0;
+}
+
+.stage-arrow {
+  width: 44px; flex: 0 0 44px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--s-1); color: var(--cover-ink-3);
+}
+.stage-arrow svg { width: 100%; height: 24px; overflow: visible; }
+.stage-arrow line, .stage-arrow polyline {
+  stroke: var(--cover-rule-strong); stroke-width: 1; fill: none;
+}
+.stage-arrow-label {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  letter-spacing: .1em; color: var(--cover-ink-3);
+}
+
+.sheet-readout {
+  margin-top: var(--s-6);
+  border-top: 1px solid var(--cover-rule);
+  padding-top: var(--s-4);
+  display: flex; flex-direction: column; gap: var(--s-2);
+  min-height: 116px;
+}
+.sheet-readout-mark {
+  margin: 0; font-family: var(--font-mono); font-size: var(--t-2xs);
+  letter-spacing: .14em; color: var(--cover-ink-3);
+}
+.sheet-readout-text {
+  margin: 0; font-size: var(--t-md); line-height: 1.45;
+  color: var(--cover-ink); max-width: var(--measure);
+}
+.sheet-readout-text.is-idle { color: var(--cover-ink-3); font-size: var(--t-sm); }
+.sheet-readout-figure {
+  margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-3);
+  font-size: var(--t-sm); color: var(--cover-ink-2);
+}
+.sheet-readout-figure .num { font-size: var(--t-lg); color: var(--cover-ink); }
+
+/* ===================================================================
+   THE DIRECTORY
+   =================================================================== */
+
+.directory-main { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.directory-title {
+  font-family: var(--font-display);
+  font-size: var(--t-2xl); line-height: 1.1;
+  letter-spacing: -0.015em; font-weight: 600;
+  margin: 0; color: var(--cover-ink);
+}
+.directory-count {
+  margin: 0 0 var(--s-2); color: var(--cover-ink-2);
+  font-size: var(--t-sm); max-width: var(--measure);
+}
+.directory-count .num { color: var(--cover-ink); }
+
+.grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: var(--s-4);
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.gridcard {
+  display: flex; flex-direction: column; gap: var(--s-3);
+  border: 1px solid var(--cover-rule);
+  background: var(--cover-raised);
+  padding: var(--s-4);
+  min-width: 0;
+}
+.gridcard-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s-2); border-bottom: 1px solid var(--cover-rule-soft);
+  padding-bottom: var(--s-2);
+}
+.gridcard-name {
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+  font-family: var(--font-display); font-size: var(--t-sm); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--cover-ink);
+  min-width: 0;
+}
+.gridcard-name:hover { color: var(--traced); }
+.gridcard-group {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  letter-spacing: .06em; color: var(--cover-ink-3); white-space: nowrap;
+}
+.gridcard-body { display: flex; flex-direction: column; gap: var(--s-2); flex: 1; }
+.gridcard-figure {
+  margin: 0; display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap;
+}
+.gridcard-figure .num {
+  font-size: var(--t-2xl); line-height: 1.1; color: var(--cover-ink);
+}
+.gridcard-figure-label {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--cover-ink-3);
+}
+.gridcard-claim {
+  margin: 0; font-size: var(--t-sm); line-height: 1.4; color: var(--cover-ink-2);
+}
+.gridcard-claim.is-null, .gridcard-null {
+  margin: 0; font-size: var(--t-sm); color: var(--cover-ink-3);
+}
+.gridcard-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-2); flex-wrap: wrap;
+  border-top: 1px solid var(--cover-rule-soft); padding-top: var(--s-3);
+  margin-top: auto;
+}
+.gridcard-dest {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--cover-ink-2);
+}
+.gridcard-open {
+  background: none; cursor: pointer;
+  border: 1px solid var(--cover-rule-strong);
+  padding: var(--s-2) var(--s-4);
+  font-family: var(--font-display); font-size: var(--t-sm);
+  color: var(--cover-ink);
   transition: background var(--motion-fast) var(--motion-ease),
-              color var(--motion-fast) var(--motion-ease),
               border-color var(--motion-fast) var(--motion-ease);
 }
-.home-cta {
-  background: var(--home-ink); color: var(--home-ground);
-  border: 1px solid var(--home-ink); font-weight: 600;
-}
-.home-cta:hover { background: var(--traced); border-color: var(--traced); color: var(--home-ink); }
-.home-ghost {
-  background: none; color: var(--home-ink);
-  border: 1px solid var(--home-rule-strong);
-}
-.home-ghost:hover { border-color: var(--home-ink); }
+.gridcard-open:hover { background: rgba(238, 241, 244, 0.08); border-color: var(--cover-ink); }
 
-/* The one focus ring in the app is drawn in --claimed, which is a blue
-   meant for paper. On the dark ground it is barely a mark, so the ring
-   changes colour here and only here. It is never removed. */
-.home :focus-visible { outline-color: var(--home-ink); }
+/* ===================================================================
+   THE LEDGER'S OWN PARTS, ON A DARK GROUND
+
+   The gap bar and the definition expander are reused on the covers, not
+   rebuilt. What changes is the ground they are drawn on, because a
+   paper-coloured track on a dark page is the bolted-on look this whole
+   section exists to avoid. The encoding does not change: solid green is
+   still the traced portion, the 45° audit hatch is still the untraced
+   remainder, and both figures are still written out beside it. The
+   green is lifted one step for the same reason the type is — luminance
+   against the ground, not a different colour.
+   =================================================================== */
+
+.cover .gapbar {
+  background: rgba(238, 241, 244, 0.05);
+  border-color: var(--cover-rule);
+}
+.cover .gapbar-fill { background-color: rgba(168, 57, 31, 0.28); }
+.cover .gapbar-traced { background: #1e9a74; }
+.cover .gapbar-none {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--cover-rule-soft) 0, var(--cover-rule-soft) 4px,
+    transparent 4px, transparent 8px
+  );
+}
+.cover .gapbar-legend { color: var(--cover-ink-2); }
+.cover .is-traced { color: #4fc59d; }
+.cover .is-gap { color: #e0705a; }
+
+.cover .term-trigger {
+  color: var(--cover-ink);
+  border-bottom-color: var(--cover-rule-strong);
+}
+.cover .term-trigger:hover { border-bottom-color: var(--cover-ink); }
+.cover .term-mark { color: var(--cover-ink-3); }
+.cover .term-body {
+  background: rgba(238, 241, 244, 0.06);
+  border-color: var(--cover-rule);
+  color: var(--cover-ink);
+}
+.cover .term-body-label { color: var(--cover-ink); }
+.cover .term-body-text, .cover .term-body-extra { color: var(--cover-ink-2); }
+
+@media (max-width: 900px) {
+  .sheet-stages { display: block; }
+  .stage { display: block; }
+  .stage-arrow {
+    width: 100%; flex: none; height: 40px;
+    flex-direction: row; gap: var(--s-2);
+  }
+  .stage-arrow svg { width: 40px; height: 40px; transform: rotate(90deg); }
+}
 
 @media (max-width: 720px) {
-  .home-inner { padding: var(--s-6) var(--s-5) var(--s-12); gap: var(--s-8); }
-  .home-frame { inset: var(--s-2); }
-  .home-frame::before, .home-frame::after { display: none; }
-  .home-headline { max-width: none; }
-  .home-standfirst { font-size: var(--t-md); }
+  .cover-inner { padding: var(--s-6) var(--s-5) var(--s-12); gap: var(--s-6); }
+  .cover-frame { inset: var(--s-2); }
+  .cover-headline, .home-headline { max-width: none; }
+  .cover-cta { flex: 1 1 auto; text-align: center; }
   .home-card { padding: var(--s-4); }
-  .home-cta, .home-ghost { flex: 1 1 auto; text-align: center; }
+  .sheet { padding: var(--s-8) var(--s-4) var(--s-5) var(--s-8); }
+  .sheet-ruler-top { left: var(--s-8); right: var(--s-4); }
+  .sheet-ruler-side { left: var(--s-2); }
+  .thesis-lede { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: 1fr; }
 }
 
 /* ===================================================================

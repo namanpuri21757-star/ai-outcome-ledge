@@ -57,6 +57,70 @@ for (const [label, width, height] of [['1440px', 1440, 900], ['390px', 390, 844]
 
   await page.goBack({ waitUntil: 'networkidle' });
   await page.waitForSelector('.home-headline');
+
+  const ctas = await page.evaluate(() =>
+    [...document.querySelectorAll('.cover-cta')].map((b) => b.textContent.trim()));
+  check('the landing page offers one call to action, and it is the locked one',
+    ctas.length === 1 && ctas[0] === 'Let me show you what I mean.', ctas.join(' | '));
+
+  // ── 0b. Into the blueprint ────────────────────────────────────
+  await page.click('.cover-cta');
+  await page.waitForSelector('.stage-node');
+  check('the call to action opens the blueprint', page.url().includes('#/thesis'), page.url());
+
+  await page.waitForTimeout(2200);   // the figures have to land before they are read
+  const stages = await page.evaluate(() =>
+    [...document.querySelectorAll('.stage-node')].map((n) => ({
+      figure: n.querySelector('.stage-figure').textContent.trim(),
+      title: n.querySelector('.stage-title').textContent.trim(),
+    })));
+  check('the blueprint draws every stage of the path', stages.length === 4,
+    stages.map((s) => s.figure).join(' → '));
+
+  await page.locator('.stage-node').nth(3).click();
+  const readout = await page.evaluate(() => ({
+    open: document.querySelectorAll('.stage-node[aria-expanded="true"]').length,
+    figure: document.querySelector('.sheet-readout-figure .num')?.textContent?.trim(),
+  }));
+  check('a stage opens a readout carrying its own figure',
+    readout.open === 1 && !!readout.figure, readout.figure);
+
+  // The share on the blueprint is the share on the ledger. One quantity,
+  // one number, on two screens that never see each other.
+  const blueprintShare = stages[3]?.figure;
+  const termCount = await page.locator('.thesis-lede .term-trigger').count();
+  check('the blueprint explains its terms from the app vocabulary', termCount >= 3, `${termCount} terms`);
+  await page.locator('.thesis-lede .term-trigger').first().click();
+  const thesisDef = await page.locator('.thesis-lede .term-body').first().isVisible();
+  check('a term on the blueprint opens its definition in place', thesisDef);
+
+  // ── 0c. Into the directory ────────────────────────────────────
+  await page.click('.cover-cta');
+  await page.waitForSelector('.gridcard');
+  check('the blueprint hands off to the directory', page.url().includes('#/directory'), page.url());
+  await page.waitForTimeout(1200);
+
+  const cardNames = await page.evaluate(() =>
+    [...document.querySelectorAll('.gridcard-name')].map((b) => b.textContent.trim()));
+  check('the directory has a card for every company it says it has',
+    cardNames.length > 0 && cardNames.every((n) => n.length > 0), `${cardNames.length} cards`);
+
+  const firstCard = await page.evaluate(() => {
+    const c = document.querySelector('.gridcard');
+    return {
+      name: c.querySelector('.gridcard-name').textContent.trim(),
+      figure: c.querySelector('.gridcard-figure .num').textContent.trim(),
+    };
+  });
+  await page.locator('.gridcard-open').first().click();
+  await page.waitForSelector('.company-verdict');
+  const companyText = (await page.textContent('.company'))?.replace(/\s+/g, ' ') ?? '';
+  check('a card opens the company it names, carrying the same figure',
+    companyText.includes(firstCard.name) && companyText.includes(firstCard.figure),
+    `${firstCard.name} · ${firstCard.figure}`);
+
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.home-headline');
   const homeOver = await page.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('the landing page does not scroll sideways', homeOver <= 0, `${homeOver}px overflow`);
@@ -236,7 +300,7 @@ for (const [label, width, height] of [['1440px', 1440, 900], ['390px', 390, 844]
   check('a deep link survives a hard reload', chips.length === 2, chips.join(' | '));
 
   // ── 11. Nothing scrolls sideways ──────────────────────────────
-  for (const route of ['#/', '#/method', '#/maintenance']) {
+  for (const route of ['#/', '#/method', '#/maintenance', '#/thesis', '#/directory']) {
     await page.goto(`${BASE}/${route}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(400);
     const over = await page.evaluate(() =>

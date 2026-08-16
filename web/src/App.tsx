@@ -5,11 +5,13 @@ import { syntheticDataset, useFixtures } from './lib/devData';
 import { freshness } from './lib/health';
 import { COPY, NAV } from './lib/labels';
 import {
-  claimRoute, companyRoute, ledgerRoute, navigate, parseHash, type Route, type ViewName,
+  claimRoute, companyRoute, isCover, ledgerRoute, navigate, parseHash, type Route, type ViewName,
 } from './lib/route';
 import type { Filters } from './lib/filters';
 
 import { HomeView } from './views/HomeView';
+import { ThesisView } from './views/ThesisView';
+import { DirectoryView } from './views/DirectoryView';
 import { LedgerView } from './views/LedgerView';
 import { ClaimView } from './views/ClaimView';
 import { CompanyView } from './views/CompanyView';
@@ -28,10 +30,11 @@ import { MaintenanceView } from './views/MaintenanceView';
    showing, which is what makes a filter applied in one place unable to
    change a number in another.
 
-   The landing page is the one view that renders outside this shell. It
-   has no masthead and no footer because it is a cover: its own top bar
-   is the whole of its chrome, and the nav labels come from the same
-   list the masthead reads.
+   Three views render outside this shell — the landing page, the
+   blueprint and the directory. They have no masthead and no footer
+   because they are a cover: one shared top bar is the whole of their
+   chrome, and its nav labels come from the same list the masthead
+   reads, so a section cannot come to be called two things.
    =================================================================== */
 
 export default function App() {
@@ -85,9 +88,13 @@ export default function App() {
     else navigate(ledgerRoute(route.filters));
   };
 
-  // Before the shell, because it replaces it rather than sitting inside
+  // Before the shell, because they replace it rather than sitting inside
   // it. Every hook above has already run, so the early return is safe.
-  if (route.view === 'home') {
+  if (isCover(route.view)) {
+    if (route.view === 'thesis') return <ThesisView data={data} error={error} onGo={go} />;
+    if (route.view === 'directory') {
+      return <DirectoryView data={data} error={error} onGo={go} onCompany={openCompany} />;
+    }
     return <HomeView data={data} error={error} onGo={go} onClaim={openClaim} />;
   }
 

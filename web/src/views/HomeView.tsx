@@ -5,7 +5,8 @@ import type { ViewName } from '../lib/route';
 import { barMax } from '../lib/aggregate';
 import { shortDate, usd } from '../lib/format';
 import { primeClaim, primeMissing } from '../lib/home';
-import { COPY, destination, LANDING_COPY, NAV, verification } from '../lib/labels';
+import { COPY, destination, LANDING_COPY, verification } from '../lib/labels';
+import { CoverBar } from '../components/CoverBar';
 import { GapBar } from '../components/GapBar';
 
 import BlurText from '../vendor/reactbits/BlurText';
@@ -24,9 +25,17 @@ import Waves from '../vendor/reactbits/Waves';
    figure in it is a field of that row, so the page cannot come to
    disagree with the ledger it is advertising.
 
-   The ground is dark here and nowhere else. This page is a cover, not a
-   reading surface: no row is coded on it and no figure is compared. The
-   moment a reader crosses into the ledger they are back on paper.
+   The ground is dark here, on the blueprint and on the directory, and
+   nowhere else. These are covers, not reading surfaces: no row is coded
+   on them and no figure is compared. The moment a reader crosses into
+   the ledger they are back on paper.
+
+   The example row is drawn on the same dark stock as the page rather
+   than on a white card. The card was a piece of another product sitting
+   on this one — its own surface, its own type, its own borders, related
+   to nothing around it. What makes it a distinct block now is the same
+   hairline rule the rest of the page is built from, and its own mark in
+   the corner, the way a figure is marked on a drawing.
    =================================================================== */
 
 interface Props {
@@ -45,8 +54,8 @@ export function HomeView({ data, error, onGo, onClaim }: Props) {
   const claim = primeClaim(rows);
 
   return (
-    <div className="home">
-      <div className="home-field" aria-hidden="true">
+    <div className="cover home">
+      <div className="cover-field" aria-hidden="true">
         <Waves
           seed={WAVE_SEED}
           paused={reduced}
@@ -59,21 +68,10 @@ export function HomeView({ data, error, onGo, onClaim }: Props) {
         />
       </div>
 
-      <div className="home-frame" aria-hidden="true" />
+      <div className="cover-frame" aria-hidden="true" />
 
-      <div className="home-inner">
-        <header className="home-bar">
-          <button type="button" className="home-mark" onClick={() => onGo('ledger')}>
-            {COPY.title}
-          </button>
-          <nav className="home-nav" aria-label="Sections">
-            {NAV.map((n) => (
-              <button key={n.view} type="button" onClick={() => onGo(n.view)}>
-                {n.label}
-              </button>
-            ))}
-          </nav>
-        </header>
+      <div className="cover-inner">
+        <CoverBar onGo={onGo} />
 
         <main className="home-main">
           <BlurText
@@ -90,18 +88,17 @@ export function HomeView({ data, error, onGo, onClaim }: Props) {
           <p className="home-standfirst">{LANDING_COPY.standfirst}</p>
 
           <section className="home-example" aria-labelledby="home-example-head">
-            <h2 id="home-example-head" className="home-eyebrow">
+            <h2 id="home-example-head" className="cover-eyebrow">
+              <span className="cover-eyebrow-mark">01</span>
               {LANDING_COPY.exampleHead}
             </h2>
 
-            {error && <p className="home-example-empty">{error}</p>}
+            {error && <p className="cover-empty">{error}</p>}
 
-            {!error && data === null && (
-              <p className="home-example-empty">Loading the row…</p>
-            )}
+            {!error && data === null && <p className="cover-empty">Loading the row…</p>}
 
             {!error && data !== null && claim === null && (
-              <p className="home-example-empty">{primeMissing(rows)}</p>
+              <p className="cover-empty">{primeMissing(rows)}</p>
             )}
 
             {claim && (
@@ -148,23 +145,22 @@ export function HomeView({ data, error, onGo, onClaim }: Props) {
 
                 <p className="home-card-note">{COPY.untracedMeaning}</p>
 
-                <button
-                  type="button"
-                  className="home-card-open"
-                  onClick={() => onClaim(claim.ref)}
-                >
-                  {LANDING_COPY.openRow}
-                </button>
+                <p className="home-card-foot">
+                  <button
+                    type="button"
+                    className="home-card-open"
+                    onClick={() => onClaim(claim.ref)}
+                  >
+                    {LANDING_COPY.openRow}
+                  </button>
+                </p>
               </div>
             )}
           </section>
 
-          <p className="home-actions">
-            <button type="button" className="home-cta" onClick={() => onGo('ledger')}>
+          <p className="cover-actions">
+            <button type="button" className="cover-cta" onClick={() => onGo('thesis')}>
               {LANDING_COPY.enter}
-            </button>
-            <button type="button" className="home-ghost" onClick={() => onGo('method')}>
-              {LANDING_COPY.method}
             </button>
           </p>
         </main>

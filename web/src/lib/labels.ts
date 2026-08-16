@@ -325,9 +325,11 @@ export const LANDING_COPY = {
   standfirst:
     'This is a public record of those claims, each one checked against what the company actually measured and what its filings actually show.',
   exampleHead: 'One row, in full',
-  enter: 'Read the ledger',
-  method: 'How a row is coded',
+  enter: 'Let me show you what I mean.',
+  dive: 'Dive in',
   openRow: 'Open this row',
+  directoryHead: 'Every company in the ledger',
+  cardOpen: 'Open the record',
 };
 
 /* ===================================================================

@@ -67,7 +67,7 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **334** web tests, **128** worker tests, both typechecks silent, build
+Expected: **353** web tests, **128** worker tests, both typechecks silent, build
 clean with no warnings.
 
 **Look at the screens before you call a UI change done.** The app renders against
@@ -91,11 +91,13 @@ cd web && npx vite build && npx vite preview --port 5200
 cd web && npm run walk
 ```
 
-78 checks at 1440px and 390px: the landing page's locked headline and its
-example figures against the row they came from, the finding above the fold,
-cross-view total consistency, filter scope, deep-link reload, browser back,
-keyboard reach, focus rings, Escape, sideways scrolling, and zero console
-errors.
+100 checks at 1440px and 390px: the whole cover journey — the landing
+page's locked headline, its example figures against the row they came from,
+its one call to action, the blueprint's four stages and their readout, a
+directory card against the company page it opens — then the finding above
+the fold, cross-view total consistency, filter scope, deep-link reload,
+browser back, keyboard reach, focus rings, Escape, sideways scrolling, and
+zero console errors.
 
 `npm test` in `worker/` never touches the network. The live check is separate:
 
@@ -117,11 +119,13 @@ says so.
 
 ## Architecture
 
-Six surfaces. Three in the nav, two reached by clicking a thing, and one a
-visitor lands on before they know what any of it is.
+Eight surfaces. Three in the nav, two reached by clicking a thing, and three
+covers a visitor crosses before they know what any of it is.
 
 ```
 (no hash)             the landing page — the question, one example row, the way in
+#/thesis              the blueprint — what happens to a claimed dollar, drawn
+#/directory           one card per company the ledger codes
 #/                    the ledger — the finding, the breakdown, the readout, every row
 #/claim/<ref>         one claim, fully unpacked. The only place a row is shown whole
 #/company/<slug>      one company's whole record, with a generated verdict
@@ -133,6 +137,24 @@ Ten top-level views were reduced to this. `REBUILD.md` has the kill list with a
 reason per view. **A deleted view is deleted, not hidden:** its name is gone from
 `ViewName`, an unknown hash lands on the ledger, and `test/interface.test.ts`
 fails if any of the deleted files, imports or route names reappear.
+
+**The three covers are dark, and the ledger is not.** `#/`, `#/thesis` and
+`#/directory` are the landing page, the blueprint and the directory:
+`isCover()` in `route.ts` names them, `App.tsx` renders them outside the
+shell, and they share one `<CoverBar>` reading the same `NAV` list the
+masthead reads. They are covers rather than reading surfaces — nothing is
+coded on them and nothing is compared — which is why the ground inverts and
+why the gap bar's *ground* is adapted for them in one scoped block at the
+end of the stylesheet. The encoding never changes: solid green traced, 45°
+audit hatch untraced, both figures written out.
+
+The journey is landing → blueprint → directory → a company's record, and
+each hand-off is one button. `lib/cover.ts` derives what the two new pages
+show: `blueprint()` returns four stages whose figures come from `totals()`,
+and `directoryCards()` returns one card per company with the largest claim
+first. `test/cover.test.ts` fails if a figure on either page stops being a
+field of what those functions return, if a term on the blueprint is defined
+anywhere but `define()`, or if a company name is typed into the directory.
 
 **The landing page is the bare root, and only the bare root.** `#/` was the
 ledger before it existed and still is: every link the app writes, every shared
@@ -365,18 +387,31 @@ instead.
   same shape of reason. If this is revisited, re-measure rather than re-reason.
 
 - **`motion` is a dependency, and it costs what Astryx was rejected for**
-  (added 2026-08-15). The landing page's headline reveal is React Bits'
-  `BlurText`, vendored into `web/src/vendor/reactbits/`, and it needs `motion`.
+  (added 2026-08-15). The covers' headline reveal is React Bits' `BlurText`,
+  their counting figures are React Bits' `CountUp`, and the directory's card
+  entrance is `motion` directly. All of it is vendored into
+  `web/src/vendor/reactbits/`, and all of it needs `motion`.
   Measured: the JS bundle went 503.75 kB → 640.51 kB (143.94 → 189.95 kB gzip).
   That is the same order as the +136 kB that got Astryx rejected above, for one
   animation. It was asked for explicitly; the alternative is the same reveal in
   CSS keyframes at no bundle cost. Re-measure before adding anything else.
 
-  Both vendored components carry a header naming every local change. Two matter:
-  the wave field's Perlin seed was `Math.random()` and is now fixed, and
-  `BlurText` dropped its permanent `will-change`, which pinned one compositor
-  layer per word and made the settled headline rasterise differently between
-  loads. The React Bits CLI cannot install either one — `jsrepo add --registry
+  Every vendored component carries a header naming its local changes. Four
+  matter, and all four were defects on screen rather than preferences:
+
+  - `Waves` seeded its Perlin field with `Math.random()`, so no two loads drew
+    the same picture.
+  - `BlurText` set `will-change` permanently, pinning one compositor layer per
+    word, which made the settled headline rasterise differently between loads.
+  - `CountUp` paints whatever its spring last emitted, and a spring approaches
+    its target rather than arriving: `$8.393B` sat on screen as `$8.37B` two
+    seconds after it had stopped moving. It now writes the exact figure once
+    the stated duration is up.
+  - `CountUp` also repainted its *start* value whenever its formatter changed
+    identity — which is every render of the parent — so clicking a stage on
+    the blueprint reset every finished figure on the page to zero.
+
+  The React Bits CLI cannot install any of them: `jsrepo add --registry
   https://reactbits.dev/ts/default` gets the site's HTML shell instead of a
   manifest. The published source is at `https://reactbits.dev/r/<Name>-TS-CSS`.
 

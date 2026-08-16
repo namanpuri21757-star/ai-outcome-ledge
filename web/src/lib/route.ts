@@ -6,6 +6,8 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
    and every state of the ledger is a link.
 
      (no hash)             the landing page — what this is, in seconds
+     #/thesis              the blueprint — the argument, before the evidence
+     #/directory           one card per company the ledger codes
      #/                    the ledger — the finding, and every row
      #/claim/<ref>         one claim, fully unpacked
      #/company/<slug>      one company's whole record
@@ -37,9 +39,18 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
    selection, because the previous entry in the history still carries it.
    =================================================================== */
 
-export type ViewName = 'home' | 'ledger' | 'claim' | 'company' | 'method' | 'maintenance';
+export type ViewName =
+  | 'home' | 'thesis' | 'directory'
+  | 'ledger' | 'claim' | 'company' | 'method' | 'maintenance';
 
-const KNOWN: ViewName[] = ['home', 'ledger', 'claim', 'company', 'method', 'maintenance'];
+const KNOWN: ViewName[] = [
+  'home', 'thesis', 'directory', 'ledger', 'claim', 'company', 'method', 'maintenance',
+];
+
+/** The three that render outside the shell: dark, no masthead, no footer. */
+export const COVER_VIEWS: ViewName[] = ['home', 'thesis', 'directory'];
+
+export const isCover = (view: ViewName): boolean => COVER_VIEWS.includes(view);
 
 /** Views that take an identifier after the view name. */
 const WITH_ID: ViewName[] = ['claim', 'company'];
