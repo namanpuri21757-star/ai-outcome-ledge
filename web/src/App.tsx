@@ -12,6 +12,7 @@ import type { Filters } from './lib/filters';
 import { HomeView } from './views/HomeView';
 import { ThesisView } from './views/ThesisView';
 import { DirectoryView } from './views/DirectoryView';
+import { PricesView } from './views/PricesView';
 import { LedgerView } from './views/LedgerView';
 import { ClaimView } from './views/ClaimView';
 import { CompanyView } from './views/CompanyView';
@@ -92,6 +93,10 @@ export default function App() {
   // it. Every hook above has already run, so the early return is safe.
   if (isCover(route.view)) {
     if (route.view === 'thesis') return <ThesisView data={data} error={error} onGo={go} />;
+    // Hardcoded, and deliberately not handed `data`: the prices it shows
+    // are published list prices, not rows, and it must render whether or
+    // not the corpus loaded.
+    if (route.view === 'prices') return <PricesView onGo={go} />;
     if (route.view === 'directory') {
       return <DirectoryView data={data} error={error} onGo={go} onCompany={openCompany} />;
     }

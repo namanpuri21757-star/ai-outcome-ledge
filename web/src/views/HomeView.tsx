@@ -158,9 +158,17 @@ export function HomeView({ data, error, onGo, onClaim }: Props) {
             )}
           </section>
 
+          {/* Two ways in, and they are different questions. The first
+              hands off to the blueprint and the ledger — one company's
+              claim, checked against that company's filings. The second
+              asks the same thing of a market: if the work got cheaper,
+              did the price. Neither replaces the other. */}
           <p className="cover-actions">
             <button type="button" className="cover-cta" onClick={() => onGo('thesis')}>
               {LANDING_COPY.enter}
+            </button>
+            <button type="button" className="cover-cta is-secondary" onClick={() => onGo('prices')}>
+              {LANDING_COPY.prices}
             </button>
           </p>
         </main>

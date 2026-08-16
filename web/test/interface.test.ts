@@ -248,10 +248,13 @@ describe('accessibility and layout guarantees', () => {
     }
   });
 
-  // The three cover views render outside the shell, so there is no
+  // The four cover views render outside the shell, so there is no
   // masthead above them and the page's own headline is its h1. Every
   // other view sits under the masthead and starts at h2.
-  const COVERS = ['/views/HomeView.tsx', '/views/ThesisView.tsx', '/views/DirectoryView.tsx'];
+  const COVERS = [
+    '/views/HomeView.tsx', '/views/ThesisView.tsx', '/views/DirectoryView.tsx',
+    '/views/PricesView.tsx',
+  ];
 
   it('starts every shell view at h2, since the masthead owns the h1', () => {
     for (const { file, body } of all) {

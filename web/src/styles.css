@@ -1416,6 +1416,181 @@ p { margin: 0 0 var(--s-3); }
 }
 
 /* ===================================================================
+   THE PRICE PAGE
+
+   The fourth cover, and the only one whose data is written into the
+   source rather than read from the corpus. It is dark for the same
+   reason the other three are: nothing is coded on it and nothing is
+   compared against a filing.
+
+   Two series colours, both lifted from the palette rather than added to
+   it — the claimed blue and the transfer ochre, each raised for
+   luminance against the dark ground, exactly as the gap bar's green is
+   above. The break rule is the audit red, raised the same way. Nothing
+   here introduces a hue the design system does not already have.
+
+   The two series are told apart three ways at once — colour, a solid
+   against a dashed line, and a round against a square marker — so the
+   chart survives being read in greyscale or by someone who does not see
+   the difference between blue and ochre.
+   =================================================================== */
+
+.cover.prices {
+  --price-1: #6fa8d8;   /* --claimed, raised for the dark ground */
+  --price-2: #d3a34e;   /* --transfer, raised the same way */
+  --price-break: #e0705a;
+}
+
+.prices-main {
+  display: flex; flex-direction: column; gap: var(--s-8);
+  max-width: var(--page); width: 100%;
+}
+
+.prices-title {
+  font-family: var(--font-display); font-size: var(--t-3xl);
+  line-height: 1.04; letter-spacing: -.01em;
+  margin: 0; max-width: 20ch; color: var(--cover-ink);
+}
+
+/* The finding, and the reason the page exists. It sits above the charts
+   because a reader who leaves after one sentence should leave with it. */
+.prices-takeaway {
+  font-family: var(--font-serif); font-size: var(--t-2xl);
+  line-height: 1.32; margin: 0; max-width: 46ch;
+  color: var(--cover-ink);
+  border-left: 2px solid var(--price-break);
+  padding-left: var(--s-5);
+}
+
+.prices-sourcing {
+  font-size: var(--t-sm); color: var(--cover-ink-2);
+  margin: 0; max-width: var(--measure);
+}
+
+.prices-panels { display: flex; flex-direction: column; gap: var(--s-10); min-width: 0; }
+
+.pricepanel { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }
+
+.pricepanel-head {
+  font-family: var(--font-display); font-size: var(--t-lg);
+  margin: 0; color: var(--cover-ink); font-weight: 600;
+}
+
+.pricepanel-key { display: flex; flex-wrap: wrap; gap: var(--s-5); margin: 0; }
+.pricekey {
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  font-size: var(--t-xs); color: var(--cover-ink-2);
+}
+.pricekey-mark { width: 22px; height: 2px; background: var(--price-1); }
+.pricekey[data-tone='1'] .pricekey-mark {
+  background: repeating-linear-gradient(
+    to right, var(--price-2) 0 6px, transparent 6px 10px
+  );
+}
+
+/* The one container in the app allowed to scroll sideways. Below the
+   chart's own width the type would otherwise be scaled down past the
+   16px floor, and a floor that bends is not a floor. The page itself
+   still does not scroll: this does, inside its own frame. */
+.pricechart-frame {
+  overflow-x: auto; min-width: 0;
+  border: 1px solid var(--cover-rule);
+  background: var(--cover-raised);
+}
+
+.pricechart { display: block; width: 100%; min-width: 680px; height: auto; }
+
+.pricechart-grid { stroke: var(--cover-rule-soft); stroke-width: 1; }
+.pricechart-axis { stroke: var(--cover-rule-strong); stroke-width: 1; }
+
+.pricechart-y, .pricechart-x {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  fill: var(--cover-ink-3);
+}
+
+.pricechart-line { fill: none; stroke: var(--price-1); stroke-width: 2; }
+.pricechart-series[data-tone='1'] .pricechart-line {
+  stroke: var(--price-2); stroke-dasharray: 7 5;
+}
+
+.pricechart-dot { fill: var(--price-1); stroke: var(--cover-ground); stroke-width: 2; }
+.pricechart-series[data-tone='1'] .pricechart-dot { fill: var(--price-2); }
+
+.pricechart-value {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  fill: var(--cover-ink);
+}
+
+.pricechart a { cursor: pointer; }
+.pricechart a:hover .pricechart-dot { fill: var(--cover-ink); }
+.pricechart a:hover .pricechart-value { fill: var(--cover-ink); }
+.pricechart a:focus-visible { outline: 2px solid var(--cover-ink); outline-offset: 2px; }
+
+.pricechart-break line {
+  stroke: var(--price-break); stroke-width: 1.5; stroke-dasharray: 4 4;
+}
+.pricechart-break text {
+  font-family: var(--font-display); font-size: var(--t-2xs);
+  fill: var(--price-break); letter-spacing: .04em;
+}
+.pricechart-break a:hover text { fill: var(--cover-ink); }
+
+/* Says what the reader is pointing at, underneath, in flow. Nothing in
+   this app is positioned over the thing it explains. */
+.pricechart-readout {
+  font-size: var(--t-sm); color: var(--cover-ink-2);
+  margin: 0; min-height: 3ex; max-width: var(--measure);
+}
+
+/* Every point again, as text. This is what a phone and a screen reader
+   get, and it is the reason the chart is allowed to be a chart. */
+.pricelist { list-style: none; margin: 0; padding: 0; }
+.priceitem {
+  display: grid; align-items: baseline; gap: var(--s-2) var(--s-4);
+  grid-template-columns: max-content max-content minmax(0, 1fr) auto;
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--cover-rule-soft);
+  font-size: var(--t-sm);
+}
+/* An ISO date is one word. Broken across two lines it stops being one. */
+.priceitem-date { color: var(--cover-ink-3); white-space: nowrap; }
+.priceitem-price { color: var(--price-1); }
+.priceitem[data-tone='1'] .priceitem-price { color: var(--price-2); }
+.priceitem-what { color: var(--cover-ink-2); }
+.priceitem.is-break { grid-template-columns: minmax(0, 1fr) auto; }
+.priceitem.is-break .priceitem-what { color: var(--price-break); }
+.priceitem-source {
+  font-family: var(--font-mono); font-size: var(--t-xs);
+  color: var(--cover-ink); text-decoration: none;
+  border-bottom: 1px solid var(--cover-rule-strong);
+  white-space: nowrap;
+}
+.priceitem-source:hover { border-bottom-color: var(--cover-ink); }
+
+/* The second way in from the landing page. It is a peer of the first,
+   not a louder version of it, so it is the same control drawn as an
+   outline rather than a fill. */
+.cover-cta.is-secondary {
+  background: none; color: var(--cover-ink);
+  border-color: var(--cover-rule-strong);
+}
+.cover-cta.is-secondary:hover {
+  background: rgba(238, 241, 244, 0.08);
+  border-color: var(--cover-ink); color: var(--cover-ink);
+}
+
+@media (max-width: 720px) {
+  .prices-takeaway { font-size: var(--t-xl); padding-left: var(--s-4); }
+  /* The second track has to be able to shrink. With both tracks sized to
+     their content, the full-width rows below span into them and push the
+     whole list — and with it the page — past the viewport. */
+  .priceitem { grid-template-columns: max-content minmax(0, 1fr); }
+  .priceitem-what { grid-column: 1 / -1; min-width: 0; }
+  .priceitem-source { grid-column: 1 / -1; justify-self: start; }
+  .priceitem.is-break { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ===================================================================
    NARROW SCREENS
 
    Everything above is already a single column of blocks, so nothing

@@ -8,6 +8,7 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
      (no hash)             the landing page — what this is, in seconds
      #/thesis              the blueprint — the argument, before the evidence
      #/directory           one card per company the ledger codes
+     #/prices              published list prices, market level, hardcoded
      #/                    the ledger — the finding, and every row
      #/claim/<ref>         one claim, fully unpacked
      #/company/<slug>      one company's whole record
@@ -40,15 +41,15 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
    =================================================================== */
 
 export type ViewName =
-  | 'home' | 'thesis' | 'directory'
+  | 'home' | 'thesis' | 'directory' | 'prices'
   | 'ledger' | 'claim' | 'company' | 'method' | 'maintenance';
 
 const KNOWN: ViewName[] = [
-  'home', 'thesis', 'directory', 'ledger', 'claim', 'company', 'method', 'maintenance',
+  'home', 'thesis', 'directory', 'prices', 'ledger', 'claim', 'company', 'method', 'maintenance',
 ];
 
-/** The three that render outside the shell: dark, no masthead, no footer. */
-export const COVER_VIEWS: ViewName[] = ['home', 'thesis', 'directory'];
+/** The four that render outside the shell: dark, no masthead, no footer. */
+export const COVER_VIEWS: ViewName[] = ['home', 'thesis', 'directory', 'prices'];
 
 export const isCover = (view: ViewName): boolean => COVER_VIEWS.includes(view);
 

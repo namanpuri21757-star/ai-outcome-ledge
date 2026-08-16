@@ -60,8 +60,14 @@ for (const [label, width, height] of [['1440px', 1440, 900], ['390px', 390, 844]
 
   const ctas = await page.evaluate(() =>
     [...document.querySelectorAll('.cover-cta')].map((b) => b.textContent.trim()));
-  check('the landing page offers one call to action, and it is the locked one',
-    ctas.length === 1 && ctas[0] === 'Let me show you what I mean.', ctas.join(' | '));
+  // Two ways in, in a fixed order: the blueprint first, the price page
+  // second. Both labels are locked, and the first must stay first —
+  // the whole cover journey starts by clicking it.
+  check('the landing page offers two calls to action, both locked, in order',
+    ctas.length === 2
+      && ctas[0] === 'Let me show you what I mean.'
+      && ctas[1] === "AI got cheaper, why isn't everyone out pricing",
+    ctas.join(' | '));
 
   // ── 0b. Into the blueprint ────────────────────────────────────
   await page.click('.cover-cta');
@@ -124,6 +130,74 @@ for (const [label, width, height] of [['1440px', 1440, 900], ['390px', 390, 844]
   const homeOver = await page.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('the landing page does not scroll sideways', homeOver <= 0, `${homeOver}px overflow`);
+
+  // ── 0d. The second way in: the price page ─────────────────────
+  // Everything here is hardcoded, so unlike every other check in this
+  // file these figures are asserted literally. That is the point: a
+  // price that drifts from the table it was typed from is the one
+  // failure this page can have.
+  await page.locator('.cover-cta.is-secondary').click();
+  await page.waitForSelector('.pricechart');
+  check('the second call to action opens the price page', page.url().includes('#/prices'), page.url());
+  await page.waitForTimeout(2000);   // the lines have to finish drawing
+
+  const takeaway = (await page.textContent('.prices-takeaway'))?.replace(/\s+/g, ' ').trim();
+  check('the takeaway is on the page, word for word',
+    takeaway === "Rev's human transcription price rose 99% between 2016 and 2026 and its own AI tier "
+      + "rose 150%, while Grammarly's apparent 2026 price drop is a plan repackaging — in neither "
+      + 'market did AI push list prices down.',
+    takeaway);
+
+  const takeawayAboveFold = await page.evaluate(() => {
+    const r = document.querySelector('.prices-takeaway').getBoundingClientRect();
+    return r.top < window.innerHeight;
+  });
+  check('the takeaway is above the fold', takeawayAboveFold);
+
+  const panels = await page.locator('.pricepanel').count();
+  check('both markets get a panel', panels === 2, `${panels} panels`);
+
+  const points = await page.evaluate(() =>
+    [...document.querySelectorAll('.pricechart a')].map((a) => ({
+      href: a.getAttribute('href'),
+      label: a.getAttribute('aria-label') ?? '',
+      blank: a.getAttribute('target') === '_blank',
+    })));
+  check('every mark on both charts is a link to its source',
+    points.length === 13 && points.every((p) => /^https:\/\//.test(p.href) && p.blank),
+    `${points.length} links`);
+
+  const prices = await page.evaluate(() =>
+    [...document.querySelectorAll('.pricechart-value')].map((t) => t.textContent.trim()));
+  const SUPPLIED = ['$1.00', '$1.00', '$1.25', '$1.50', '$1.99', '$0.10', '$0.25',
+                    '$12.50', '$15.00', '$15.00', '$12.00', '$33.00'];
+  check('every price drawn is one of the twelve supplied, and all twelve are drawn',
+    prices.length === SUPPLIED.length && [...prices].sort().join() === [...SUPPLIED].sort().join(),
+    prices.join(' '));
+
+  const brk = await page.evaluate(() => {
+    const g = document.querySelector('.pricechart-break');
+    if (!g) return null;
+    return {
+      label: g.querySelector('text').textContent.trim(),
+      href: g.querySelector('a').getAttribute('href'),
+      rule: !!g.querySelector('line'),
+    };
+  });
+  check('the October 2025 break is drawn, labelled and linked',
+    brk && brk.rule && brk.label === 'Oct 2025 — Business plan folded into Pro'
+      && /^https:\/\//.test(brk.href),
+    brk ? `${brk.label} → ${brk.href}` : 'no marker');
+
+  // Three drawn runs in total: Rev human, Rev AI, and Grammarly's
+  // pre-break stretch. A fourth would mean a line crossing the break.
+  const runs = await page.locator('.pricechart-line').count();
+  check('no line is drawn across the repackaging', runs === 3, `${runs} lines`);
+
+  await page.goBack({ waitUntil: 'networkidle' });
+  await page.waitForSelector('.home-headline');
+  check('back returns from the price page to the landing page',
+    !page.url().includes('#/prices'), page.url());
 
   // ── 1. Cold load ─────────────────────────────────────────────
   await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle' });
@@ -300,7 +374,7 @@ for (const [label, width, height] of [['1440px', 1440, 900], ['390px', 390, 844]
   check('a deep link survives a hard reload', chips.length === 2, chips.join(' | '));
 
   // ── 11. Nothing scrolls sideways ──────────────────────────────
-  for (const route of ['#/', '#/method', '#/maintenance', '#/thesis', '#/directory']) {
+  for (const route of ['#/', '#/method', '#/maintenance', '#/thesis', '#/directory', '#/prices']) {
     await page.goto(`${BASE}/${route}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(400);
     const over = await page.evaluate(() =>

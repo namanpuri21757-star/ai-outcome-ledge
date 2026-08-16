@@ -67,7 +67,7 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **353** web tests, **128** worker tests, both typechecks silent, build
+Expected: **375** web tests, **128** worker tests, both typechecks silent, build
 clean with no warnings.
 
 **Look at the screens before you call a UI change done.** The app renders against
@@ -91,13 +91,15 @@ cd web && npx vite build && npx vite preview --port 5200
 cd web && npm run walk
 ```
 
-100 checks at 1440px and 390px: the whole cover journey — the landing
+120 checks at 1440px and 390px: the whole cover journey — the landing
 page's locked headline, its example figures against the row they came from,
-its one call to action, the blueprint's four stages and their readout, a
-directory card against the company page it opens — then the finding above
-the fold, cross-view total consistency, filter scope, deep-link reload,
-browser back, keyboard reach, focus rings, Escape, sideways scrolling, and
-zero console errors.
+its two locked calls to action in order, the blueprint's four stages and their
+readout, a directory card against the company page it opens, then the price
+page's verbatim takeaway, its twelve prices against the supplied table, its
+source links and its October 2025 break — then the finding above the fold,
+cross-view total consistency, filter scope, deep-link reload, browser back,
+keyboard reach, focus rings, Escape, sideways scrolling, and zero console
+errors.
 
 `npm test` in `worker/` never touches the network. The live check is separate:
 
@@ -119,13 +121,14 @@ says so.
 
 ## Architecture
 
-Eight surfaces. Three in the nav, two reached by clicking a thing, and three
+Nine surfaces. Three in the nav, two reached by clicking a thing, and four
 covers a visitor crosses before they know what any of it is.
 
 ```
-(no hash)             the landing page — the question, one example row, the way in
+(no hash)             the landing page — the question, one example row, two ways in
 #/thesis              the blueprint — what happens to a claimed dollar, drawn
 #/directory           one card per company the ledger codes
+#/prices              published list prices, market level, hardcoded
 #/                    the ledger — the finding, the breakdown, the readout, every row
 #/claim/<ref>         one claim, fully unpacked. The only place a row is shown whole
 #/company/<slug>      one company's whole record, with a generated verdict
@@ -138,11 +141,13 @@ reason per view. **A deleted view is deleted, not hidden:** its name is gone fro
 `ViewName`, an unknown hash lands on the ledger, and `test/interface.test.ts`
 fails if any of the deleted files, imports or route names reappear.
 
-**The three covers are dark, and the ledger is not.** `#/`, `#/thesis` and
-`#/directory` are the landing page, the blueprint and the directory:
-`isCover()` in `route.ts` names them, `App.tsx` renders them outside the
-shell, and they share one `<CoverBar>` reading the same `NAV` list the
-masthead reads. They are covers rather than reading surfaces — nothing is
+**The four covers are dark, and the ledger is not.** The landing page, the
+blueprint, the directory and the price page: `isCover()` in `route.ts` names
+them, `App.tsx` renders them outside the shell, and they share one
+`<CoverBar>` reading the same `NAV` list the masthead reads. The `COVERS`
+list in `test/interface.test.ts` must name the same four — it is what
+allows a cover to own an `h1`, and a fifth cover added without it fails
+the "every shell view starts at h2" check. They are covers rather than reading surfaces — nothing is
 coded on them and nothing is compared — which is why the ground inverts and
 why the gap bar's *ground* is adapted for them in one scoped block at the
 end of the stylesheet. The encoding never changes: solid green traced, 45°
@@ -163,6 +168,34 @@ character of difference before the slash is stripped. `#/home` names the same
 page for anyone who has to link to it. It renders outside the shell — no
 masthead, no footer, its own top bar — so it is the one view that owns an `h1`,
 and it is the one dark surface in the app.
+
+**The price page is the one surface that reads nothing.** `#/prices` answers
+"where did the AI money go" from the market instead of the company: if AI had
+made a service cheaper to produce, its list price is where that would show.
+Its ten prices, two markets and one structural break are hardcoded in
+`lib/prices.ts` with a dated publication URL on every point — no Supabase, no
+corpus row, no collector. `App.tsx` deliberately does not hand it `data`, so
+it renders whether or not the ledger loaded.
+
+Three rules specific to it:
+
+- **Nothing on it may be interpolated.** No point between two given ones, no
+  rounded axis label, no extended line. The y axis is ticked at the published
+  prices and written only at the lowest and highest of them; the x axis is
+  ticked at the publication dates. `test/prices.test.ts` restates the whole
+  table independently and fails if the module's points differ by one value.
+- **A repackaging breaks the line.** A `PriceSeries` carries `runs` rather
+  than one list of points, and only a run of two or more is drawn. Grammarly's
+  line stops at 2025-05-08 and its two 2026 tiers stand alone, because a line
+  through them reads as a price cut and there was no price cut. The October
+  2025 marker is drawn, labelled and source-linked.
+- **These are dated publications, not archive captures,** and must never be
+  described as archived or as Wayback. A test greps for both.
+
+It is also the one place a written finding is allowed, against the rule below,
+because its data cannot move underneath the sentence: the table and the
+sentence are in the same file, and the test recomputes the sentence's two
+percentages from the prices on every run.
 
 ### Invariants that must not be broken
 
@@ -492,6 +525,12 @@ ledger, every company verdict and every margin explanation is assembled from the
 rows at render time — `lib/readout.ts`, `companies.verdict()`, `outcome.reason`.
 A typed sentence about the numbers goes stale silently, and this is a project
 about numbers being checkable.
+
+The one exception is the price page's takeaway, and it is allowed only because
+the data under it cannot move: the ten prices are hardcoded in the same file as
+the sentence, and `test/prices.test.ts` recomputes both percentages the sentence
+states from those prices on every run. If that page ever reads a row, the
+sentence has to become an assembled one.
 
 ---
 
