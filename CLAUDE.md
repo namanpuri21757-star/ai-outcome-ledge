@@ -240,18 +240,58 @@ instead.
 
 ## Known state
 
-- **Nothing deploys on push. The frontend is a Worker serving static assets,
-  not a Pages project.** `wrangler pages project list` returns nothing for this
-  account, `*.pages.dev` does not resolve, and every deployment on all three
-  Workers reads `Source: wrangler`. Pushing to `main` publishes code to GitHub
-  and changes nothing that is serving. Deploy the site with `npm run deploy`
-  from `web/` (config in `web/wrangler.jsonc`) and the collector with
-  `npx wrangler deploy` from `worker/`.
+- **Pushing to `main` DOES deploy the frontend. This file said the opposite
+  until 2026-08-15; that was wrong and cost two sessions.** Workers Builds is
+  connected to `namanpuri21757-star/ai-outcome-ledge` on both `ai-outcome-ledge`
+  and `ai-outcome-ledge1`, with `main` → `npm run build` + `npx wrangler deploy`
+  and every other branch → `npx wrangler versions upload` (a preview version, not
+  production, aliased `https://<branch>-ai-outcome-ledge1.ai-ledger.workers.dev`).
 
-- **There are two frontend Workers and only one of them is live.**
-  `ai-outcome-ledge1` is what `web/wrangler.jsonc` targets and has the most
-  recent deployment. `ai-outcome-ledge` no longer resolves. Confirm and delete
-  the dead one, or the next person will update the wrong one.
+  **Two traps make it look disconnected, and both fooled a previous session:**
+
+  1. The builds API is keyed by **script tag**, not script name. Asking by name
+     returns `12040: No build configuration` and an empty trigger list — a false
+     negative indistinguishable from a true absence. Resolve the tag first:
+
+     ```
+     GET /accounts/{acct}/workers/services/ai-outcome-ledge1
+         -> default_environment.script.tag
+     GET /accounts/{acct}/builds/workers/{tag}          # config
+     GET /accounts/{acct}/builds/workers/{tag}/triggers # triggers
+     GET /accounts/{acct}/builds/workers/{tag}/builds   # history
+     ```
+
+  2. A finished build reads `status: "stopped"`. That means the container
+     exited, **not** that it failed — read `build_outcome` (`success`) or the
+     log tail instead. And a CI build runs `wrangler deploy` inside the
+     container, so its deployment reads `Source: wrangler` exactly like a local
+     one. Neither field distinguishes CI from CLI.
+
+  `npm run deploy` from `web/` still works and is what the gate assumes. The
+  collector (`worker/`) has no build config and deploys only by CLI.
+
+- **The CI build env carries a trailing newline on `VITE_SUPABASE_ANON_KEY`**
+  (stored `…fU4bg\n`, observed 2026-08-15). Local CLI builds read `.env` and are
+  unaffected, so a CI-deployed bundle can carry a key a local build does not.
+  Check this before trusting a push-deploy.
+
+- **There are two frontend Workers and the wrong one still answers.**
+  `ai-outcome-ledge1` is what `web/wrangler.jsonc` targets and is the real site.
+  `ai-outcome-ledge` **does resolve** — this file previously said it did not,
+  which was wrong (checked 2026-08-15). It returns HTTP 200 and serves the
+  *unbuilt* dev `index.html`, whose `<script src="/src/main.tsx">` fails the
+  module MIME check and leaves `#root` empty. So it is a blank white page on a
+  name one character away from the live one, and a reader who lands there sees
+  nothing and has no way to tell why. Delete it, or the next person debugs a
+  site that was never deployed.
+
+  The two are told apart by the trailing `1`, not by content:
+
+  ```
+  curl -s https://ai-outcome-ledge.ai-ledger.workers.dev/ | grep main.tsx
+  ```
+
+  A hit means you are on the dead one.
 
 - **The outcomes job ran out of subrequests, and that is why it left no trace**
   (diagnosed and fixed 2026-08-15). It issued one query per company per series —
