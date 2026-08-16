@@ -297,7 +297,7 @@ export const COPY = {
   untracedMeaning:
     'The claimed figure cannot be matched to a named line item in a financial statement. It does not mean the claim is false — several of these claims are audited and true. It measures the distance between a number being real and a number being locatable.',
   absorbed: 'Absorbed by a supplier',
-  title: 'TEST DEPLOY',
+  title: 'AI Outcome Ledger',
   strapline:
     'Every public claim of an AI gain, coded against what was actually measured.',
 };
