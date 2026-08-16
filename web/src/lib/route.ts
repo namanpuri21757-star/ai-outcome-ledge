@@ -2,14 +2,24 @@ import { EMPTY_FILTERS, type Filters } from './filters';
 import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
 
 /* ===================================================================
-   Five routes. Everything a reader can be looking at is one of them,
+   Six routes. Everything a reader can be looking at is one of them,
    and every state of the ledger is a link.
 
+     (no hash)             the landing page — what this is, in seconds
      #/                    the ledger — the finding, and every row
      #/claim/<ref>         one claim, fully unpacked
      #/company/<slug>      one company's whole record
      #/method              how a row is coded, generated from labels.ts
      #/maintenance         collector health, the checking queue, submit
+
+   ── Why the landing page is the empty hash ────────────────────────
+
+   `#/` was the ledger before the landing page existed and still is:
+   every link the app writes, every shared URL, every bookmark points
+   there and must keep resolving there. So the one address left over is
+   the bare root — a visitor who types the domain and nothing else. That
+   is exactly the visitor the landing page is for. `#/home` names the
+   same page for anyone who needs to link to it.
 
    ── Filter scope is enforced here ─────────────────────────────────
 
@@ -27,9 +37,9 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
    selection, because the previous entry in the history still carries it.
    =================================================================== */
 
-export type ViewName = 'ledger' | 'claim' | 'company' | 'method' | 'maintenance';
+export type ViewName = 'home' | 'ledger' | 'claim' | 'company' | 'method' | 'maintenance';
 
-const KNOWN: ViewName[] = ['ledger', 'claim', 'company', 'method', 'maintenance'];
+const KNOWN: ViewName[] = ['home', 'ledger', 'claim', 'company', 'method', 'maintenance'];
 
 /** Views that take an identifier after the view name. */
 const WITH_ID: ViewName[] = ['claim', 'company'];
@@ -43,7 +53,11 @@ export interface Route {
   filters: Filters;
 }
 
-export const HOME: Route = { view: 'ledger', id: null, filters: EMPTY_FILTERS };
+/** Where an unreadable hash lands, and what `#/` means. */
+export const LEDGER: Route = { view: 'ledger', id: null, filters: EMPTY_FILTERS };
+
+/** The bare root. A visitor who has not been sent anywhere in particular. */
+export const LANDING: Route = { view: 'home', id: null, filters: EMPTY_FILTERS };
 
 const list = (raw: string | null): string[] =>
   (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -77,8 +91,12 @@ export function serializeFilters(f: Filters, q: URLSearchParams): void {
 }
 
 export function parseHash(hash: string): Route {
+  // `#/` carries a slash and the bare root does not, and that one
+  // character is the whole distinction between the ledger and the
+  // landing page. Read it before the slash is stripped.
+  const isBareRoot = hash === '' || hash === '#';
   const raw = (hash ?? '').replace(/^#\/?/, '');
-  if (!raw) return HOME;
+  if (!raw) return isBareRoot ? LANDING : LEDGER;
 
   const [path, query = ''] = raw.split('?');
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -86,11 +104,11 @@ export function parseHash(hash: string): Route {
   // every shared link to a filtered ledger takes.
   const view = (parts[0] ?? 'ledger') as ViewName;
 
-  if (!KNOWN.includes(view)) return HOME;
+  if (!KNOWN.includes(view)) return LEDGER;
 
   const id = WITH_ID.includes(view) ? (parts[1] ?? null) : null;
   // A drill-down with no identifier is a link that lost its subject.
-  if (WITH_ID.includes(view) && !id) return HOME;
+  if (WITH_ID.includes(view) && !id) return LEDGER;
 
   return {
     view,
@@ -106,7 +124,8 @@ export function toHash(route: Route): string {
   const segments: string[] = [route.view];
   if (WITH_ID.includes(route.view) && route.id) segments.push(encodeURIComponent(route.id));
 
-  // The ledger is the front door, so it is `#/` rather than `#/ledger`.
+  // The ledger is `#/` rather than `#/ledger`, because that is the URL
+  // every link written before the landing page existed already uses.
   const path = route.view === 'ledger' ? '' : segments.join('/');
   const qs = q.toString();
   return `#/${path}${qs ? '?' + qs : ''}`;

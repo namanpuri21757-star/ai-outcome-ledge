@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  claimRoute, companyRoute, FILTERED_VIEW, HOME, ledgerRoute, parseFilters, parseHash,
+  claimRoute, companyRoute, FILTERED_VIEW, LANDING, LEDGER, ledgerRoute, parseFilters, parseHash,
   serializeFilters, toHash,
 } from '../src/lib/route';
 import { EMPTY_FILTERS, type Filters } from '../src/lib/filters';
@@ -8,10 +8,23 @@ import { EMPTY_FILTERS, type Filters } from '../src/lib/filters';
 const f = (patch: Partial<Filters> = {}): Filters => ({ ...EMPTY_FILTERS, ...patch });
 
 describe('parseHash', () => {
-  it('lands on the ledger for an empty hash', () => {
-    expect(parseHash('')).toEqual(HOME);
-    expect(parseHash('#')).toEqual(HOME);
-    expect(parseHash('#/')).toEqual(HOME);
+  it('lands on the landing page at the bare root, and only there', () => {
+    // The distinction is one character. `#/` is the ledger because every
+    // link this app has ever written points at it; the bare root is the
+    // address nobody was sent to, which is who the landing page is for.
+    expect(parseHash('')).toEqual(LANDING);
+    expect(parseHash('#')).toEqual(LANDING);
+    expect(parseHash('#/')).toEqual(LEDGER);
+  });
+
+  it('names the landing page for anyone who has to link to it', () => {
+    expect(parseHash('#/home')).toEqual(LANDING);
+    expect(toHash(LANDING)).toBe('#/home');
+  });
+
+  it('carries no filter onto the landing page, even by hand', () => {
+    expect(parseHash('#/home?dest=5&q=ibm').filters).toEqual(EMPTY_FILTERS);
+    expect(toHash({ ...LANDING, filters: f({ destinations: [5] }) })).toBe('#/home');
   });
 
   it('lands on the ledger for a view that no longer exists', () => {
@@ -90,7 +103,7 @@ describe('filter scope is enforced by the router', () => {
 
 describe('toHash', () => {
   it('keeps a clean ledger URL clean', () => {
-    expect(toHash(HOME)).toBe('#/');
+    expect(toHash(LEDGER)).toBe('#/');
     expect(toHash(ledgerRoute(EMPTY_FILTERS))).toBe('#/');
   });
 

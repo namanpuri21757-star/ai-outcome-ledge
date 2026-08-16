@@ -924,6 +924,209 @@ p { margin: 0 0 var(--s-3); }
 .form-done { font-size: var(--t-sm); }
 
 /* ===================================================================
+   THE LANDING PAGE
+
+   The one dark surface, and the only one that is not a reading surface:
+   nothing is coded here, nothing is compared, and a visitor is on it for
+   seconds. The palette is the ledger's own, inverted — ink becomes the
+   ground and paper becomes the type — so crossing into the ledger reads
+   as turning a cover rather than arriving somewhere else.
+
+   The example row keeps its paper. The gap bar is the argument of the
+   whole project and it is drawn in ledger green on audit red against
+   light stock; putting it on the dark ground would mean restyling it,
+   so the row it belongs to is inset as a piece of the ledger instead.
+   =================================================================== */
+
+.home {
+  --home-ground: #0a1018;
+  --home-ink: #eef1f4;
+  --home-ink-2: #9dacb7;
+  --home-rule: rgba(238, 241, 244, 0.22);
+  --home-rule-strong: rgba(238, 241, 244, 0.38);
+
+  position: relative;
+  min-height: 100vh;
+  background: var(--home-ground);
+  color: var(--home-ink);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fixed rather than absolute: the field is sized to the viewport once,
+   so the picture does not change when the example row loads in under
+   it, and it does not swim while the page scrolls. */
+.home-field, .home-frame {
+  position: fixed;
+  pointer-events: none;
+}
+.home-field { inset: 0; z-index: 0; }
+/* The canvas class comes from the vendored component; its container is
+   positioned by its own inline styles. */
+.waves-canvas { display: block; width: 100%; height: 100%; }
+
+/* The hairline frame: an outer rule inset from the edge, and interior
+   verticals at the thirds. The verticals are drawn the way the ruled
+   paper on every other page is drawn — a hard-stop gradient rather than
+   a pseudo-element, because nothing in this stylesheet may set
+   `content`, decorative or not. */
+.home-frame {
+  inset: var(--s-4);
+  border: 1px solid var(--home-rule);
+  background: repeating-linear-gradient(
+    to right,
+    var(--home-rule) 0 1px,
+    transparent 1px 33.333%
+  );
+  z-index: 1;
+}
+
+.home-inner {
+  position: relative; z-index: 2;
+  width: 100%; max-width: var(--page);
+  margin: 0 auto;
+  padding: var(--s-6) var(--s-10) var(--s-12);
+  display: flex; flex-direction: column; gap: var(--s-8);
+  flex: 1;
+}
+
+/* ---- top bar ---- */
+
+.home-bar {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: var(--s-3) var(--s-6);
+  border-bottom: 1px solid var(--home-rule);
+  padding-bottom: var(--s-4);
+}
+.home-mark {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: var(--font-display); font-size: var(--t-sm);
+  text-transform: uppercase; letter-spacing: .18em; font-weight: 600;
+  color: var(--home-ink);
+}
+.home-nav { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.home-nav button {
+  background: none; border: 1px solid transparent; cursor: pointer;
+  font-family: var(--font-display); font-size: var(--t-sm);
+  text-transform: uppercase; letter-spacing: .12em;
+  color: var(--home-ink-2); padding: var(--s-2) var(--s-3);
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.home-nav button:hover { color: var(--home-ink); border-color: var(--home-rule); }
+
+/* ---- the hook ---- */
+
+.home-main { display: flex; flex-direction: column; gap: var(--s-5); }
+
+.home-headline {
+  font-family: var(--font-display);
+  font-size: var(--t-4xl);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--home-ink);
+  margin: 0;
+  max-width: 26ch;
+}
+
+.home-standfirst {
+  font-size: var(--t-md);
+  line-height: 1.45;
+  color: var(--home-ink-2);
+  max-width: 62ch;
+  margin: 0;
+}
+
+/* ---- the example ---- */
+
+.home-example { display: flex; flex-direction: column; gap: var(--s-3); }
+.home-eyebrow {
+  font-family: var(--font-display); font-size: var(--t-2xs);
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--home-ink-2); margin: 0; font-weight: 600;
+}
+.home-example-empty { color: var(--home-ink-2); font-size: var(--t-sm); margin: 0; }
+
+.home-card {
+  background: var(--paper-raised);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  padding: var(--s-4) var(--s-5);
+  max-width: 72ch;
+  display: flex; flex-direction: column; gap: var(--s-2);
+}
+.home-card-meta {
+  display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4);
+  font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-3); margin: 0;
+}
+.home-card-co { color: var(--ink); font-weight: 600; }
+.home-card-claim {
+  font-family: var(--font-serif); font-size: var(--t-lg);
+  line-height: 1.35; margin: 0; color: var(--ink);
+}
+.home-card-figures {
+  display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-10);
+  border-top: 1px solid var(--rule); padding-top: var(--s-3);
+  margin-top: var(--s-1);
+}
+.home-card-fig { display: flex; flex-direction: column; gap: var(--s-1); }
+.home-card-fig-label {
+  font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-3);
+}
+.home-card-fig-value { font-size: var(--t-xl); line-height: 1.1; }
+.home-card-note {
+  font-size: var(--t-sm); color: var(--ink-2); margin: 0; max-width: var(--measure);
+}
+.home-card-open {
+  align-self: flex-start;
+  background: none; border: 1px solid var(--rule-strong); cursor: pointer;
+  font-family: var(--font-display); font-size: var(--t-sm);
+  color: var(--ink); padding: var(--s-2) var(--s-4);
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+.home-card-open:hover { background: var(--paper-sunk); }
+
+/* ---- the hand-off ---- */
+
+.home-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin: 0; }
+.home-cta, .home-ghost {
+  font-family: var(--font-display); font-size: var(--t-md);
+  padding: var(--s-3) var(--s-8); cursor: pointer;
+  letter-spacing: .01em;
+  transition: background var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.home-cta {
+  background: var(--home-ink); color: var(--home-ground);
+  border: 1px solid var(--home-ink); font-weight: 600;
+}
+.home-cta:hover { background: var(--traced); border-color: var(--traced); color: var(--home-ink); }
+.home-ghost {
+  background: none; color: var(--home-ink);
+  border: 1px solid var(--home-rule-strong);
+}
+.home-ghost:hover { border-color: var(--home-ink); }
+
+/* The one focus ring in the app is drawn in --claimed, which is a blue
+   meant for paper. On the dark ground it is barely a mark, so the ring
+   changes colour here and only here. It is never removed. */
+.home :focus-visible { outline-color: var(--home-ink); }
+
+@media (max-width: 720px) {
+  .home-inner { padding: var(--s-6) var(--s-5) var(--s-12); gap: var(--s-8); }
+  .home-frame { inset: var(--s-2); }
+  .home-frame::before, .home-frame::after { display: none; }
+  .home-headline { max-width: none; }
+  .home-standfirst { font-size: var(--t-md); }
+  .home-card { padding: var(--s-4); }
+  .home-cta, .home-ghost { flex: 1 1 auto; text-align: center; }
+}
+
+/* ===================================================================
    NARROW SCREENS
 
    Everything above is already a single column of blocks, so nothing

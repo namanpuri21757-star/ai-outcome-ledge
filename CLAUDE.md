@@ -67,7 +67,7 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **321** web tests, **128** worker tests, both typechecks silent, build
+Expected: **334** web tests, **128** worker tests, both typechecks silent, build
 clean with no warnings.
 
 **Look at the screens before you call a UI change done.** The app renders against
@@ -91,9 +91,11 @@ cd web && npx vite build && npx vite preview --port 5200
 cd web && npm run walk
 ```
 
-70 checks at 1440px and 390px: the finding above the fold, cross-view total
-consistency, filter scope, deep-link reload, browser back, keyboard reach,
-focus rings, Escape, sideways scrolling, and zero console errors.
+78 checks at 1440px and 390px: the landing page's locked headline and its
+example figures against the row they came from, the finding above the fold,
+cross-view total consistency, filter scope, deep-link reload, browser back,
+keyboard reach, focus rings, Escape, sideways scrolling, and zero console
+errors.
 
 `npm test` in `worker/` never touches the network. The live check is separate:
 
@@ -115,9 +117,11 @@ says so.
 
 ## Architecture
 
-Five surfaces. Three in the nav, two reached by clicking a thing.
+Six surfaces. Three in the nav, two reached by clicking a thing, and one a
+visitor lands on before they know what any of it is.
 
 ```
+(no hash)             the landing page — the question, one example row, the way in
 #/                    the ledger — the finding, the breakdown, the readout, every row
 #/claim/<ref>         one claim, fully unpacked. The only place a row is shown whole
 #/company/<slug>      one company's whole record, with a generated verdict
@@ -129,6 +133,14 @@ Ten top-level views were reduced to this. `REBUILD.md` has the kill list with a
 reason per view. **A deleted view is deleted, not hidden:** its name is gone from
 `ViewName`, an unknown hash lands on the ledger, and `test/interface.test.ts`
 fails if any of the deleted files, imports or route names reappear.
+
+**The landing page is the bare root, and only the bare root.** `#/` was the
+ledger before it existed and still is: every link the app writes, every shared
+URL and every bookmark resolves there unchanged. `parseHash` reads the one
+character of difference before the slash is stripped. `#/home` names the same
+page for anyone who has to link to it. It renders outside the shell — no
+masthead, no footer, its own top bar — so it is the one view that owns an `h1`,
+and it is the one dark surface in the app.
 
 ### Invariants that must not be broken
 
@@ -351,6 +363,22 @@ instead.
   +131 kB of CSS and +136 kB of JS, because `astryx.css` is a static stylesheet
   for the whole system that cannot be tree-shaken. shadcn/ui was rejected for the
   same shape of reason. If this is revisited, re-measure rather than re-reason.
+
+- **`motion` is a dependency, and it costs what Astryx was rejected for**
+  (added 2026-08-15). The landing page's headline reveal is React Bits'
+  `BlurText`, vendored into `web/src/vendor/reactbits/`, and it needs `motion`.
+  Measured: the JS bundle went 503.75 kB → 640.51 kB (143.94 → 189.95 kB gzip).
+  That is the same order as the +136 kB that got Astryx rejected above, for one
+  animation. It was asked for explicitly; the alternative is the same reveal in
+  CSS keyframes at no bundle cost. Re-measure before adding anything else.
+
+  Both vendored components carry a header naming every local change. Two matter:
+  the wave field's Perlin seed was `Math.random()` and is now fixed, and
+  `BlurText` dropped its permanent `will-change`, which pinned one compositor
+  layer per word and made the settled headline rasterise differently between
+  loads. The React Bits CLI cannot install either one — `jsrepo add --registry
+  https://reactbits.dev/ts/default` gets the site's HTML shell instead of a
+  manifest. The published source is at `https://reactbits.dev/r/<Name>-TS-CSS`.
 
 - **Stooq stopped serving automated clients (observed 2026-08-15).** Every symbol
   returns HTTP 200 with a JavaScript proof-of-work interstitial. The parser

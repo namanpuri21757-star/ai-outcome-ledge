@@ -4,7 +4,8 @@ import { chromium } from '@playwright/test';
  * The scripted click-through, at both widths, against the built output
  * and real data:
  *
- *   cold load → headline finding → drill to a company → drill to a claim
+ *   landing page → cold load → headline finding → drill to a company
+ *   → drill to a claim
  *   → reach the source → back out → apply a filter → cross-check a total
  *   against another view → hard reload on a deep link → browser back.
  *
@@ -30,6 +31,35 @@ for (const [label, width, height] of [['1440px', 1440, 900], ['390px', 390, 844]
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+
+  // ── 0. The landing page, at the bare root ─────────────────────
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.home-headline', { timeout: 15000 });
+
+  const locked =
+    'Everyone is spending billions on AI and claiming it is improving their business. But is it really?';
+  const hook = (await page.textContent('.home-headline'))?.replace(/\s+/g, ' ').trim();
+  check('the landing page carries the locked headline, word for word',
+    hook === locked, hook?.slice(0, 48));
+  check('the headline is the page h1, since there is no masthead here',
+    await page.evaluate(() => !!document.querySelector('h1.home-headline')));
+
+  // The example is one row of the ledger, so its two figures have to be
+  // the row's figures — not a rounder pair that reads better.
+  const homeFigures = await page.evaluate(() =>
+    [...document.querySelectorAll('.home-card-fig-value')].map((e) => e.textContent.trim()));
+  await page.click('.home-card-open');
+  await page.waitForSelector('.claim-headline');
+  const claimText = (await page.textContent('.claim'))?.replace(/\s+/g, ' ') ?? '';
+  check("the example figures are the figures on the row itself",
+    homeFigures.length === 3 && homeFigures.every((f) => claimText.includes(f)),
+    homeFigures.join(' · '));
+
+  await page.goBack({ waitUntil: 'networkidle' });
+  await page.waitForSelector('.home-headline');
+  const homeOver = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  check('the landing page does not scroll sideways', homeOver <= 0, `${homeOver}px overflow`);
 
   // ── 1. Cold load ─────────────────────────────────────────────
   await page.goto(`${BASE}/#/`, { waitUntil: 'networkidle' });

@@ -1,3 +1,4 @@
+import type { ViewName } from './route';
 import type { ClaimKind, EpistemicTag, MeasurementBasis, VerificationStatus } from './types';
 
 /* ===================================================================
@@ -299,6 +300,34 @@ export const COPY = {
   title: 'TEST DEPLOY',
   strapline:
     'Every public claim of an AI gain, coded against what was actually measured.',
+};
+
+/**
+ * The three places in the nav. Read by the masthead and by the landing
+ * page's top bar, so the two cannot come to disagree about what a
+ * section is called.
+ */
+export const NAV: Array<{ view: ViewName; label: string }> = [
+  { view: 'ledger', label: 'The ledger' },
+  { view: 'method', label: 'Method' },
+  { view: 'maintenance', label: 'Maintenance' },
+];
+
+/**
+ * The landing page. It is the only surface written rather than
+ * assembled, because it has to say what the project is before any row
+ * has loaded — so it states no fact about the data. Every number a
+ * visitor sees there comes from the row itself.
+ */
+export const LANDING_COPY = {
+  headline:
+    'Everyone is spending billions on AI and claiming it is improving their business. But is it really?',
+  standfirst:
+    'This is a public record of those claims, each one checked against what the company actually measured and what its filings actually show.',
+  exampleHead: 'One row, in full',
+  enter: 'Read the ledger',
+  method: 'How a row is coded',
+  openRow: 'Open this row',
 };
 
 /* ===================================================================

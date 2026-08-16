@@ -3,12 +3,13 @@ import type { Dataset, FetchRun } from './lib/types';
 import { configError, friendlyError, loadDataset, loadRuns } from './lib/supabase';
 import { syntheticDataset, useFixtures } from './lib/devData';
 import { freshness } from './lib/health';
-import { COPY } from './lib/labels';
+import { COPY, NAV } from './lib/labels';
 import {
   claimRoute, companyRoute, ledgerRoute, navigate, parseHash, type Route, type ViewName,
 } from './lib/route';
 import type { Filters } from './lib/filters';
 
+import { HomeView } from './views/HomeView';
 import { LedgerView } from './views/LedgerView';
 import { ClaimView } from './views/ClaimView';
 import { CompanyView } from './views/CompanyView';
@@ -26,13 +27,12 @@ import { MaintenanceView } from './views/MaintenanceView';
    to the view that computes it, from the rows that view is actually
    showing, which is what makes a filter applied in one place unable to
    change a number in another.
-   =================================================================== */
 
-const NAV: Array<{ view: ViewName; label: string }> = [
-  { view: 'ledger', label: 'The ledger' },
-  { view: 'method', label: 'Method' },
-  { view: 'maintenance', label: 'Maintenance' },
-];
+   The landing page is the one view that renders outside this shell. It
+   has no masthead and no footer because it is a cover: its own top bar
+   is the whole of its chrome, and the nav labels come from the same
+   list the masthead reads.
+   =================================================================== */
 
 export default function App() {
   const [data, setData] = useState<Dataset | null>(null);
@@ -84,6 +84,12 @@ export default function App() {
     if (window.history.length > 1) window.history.back();
     else navigate(ledgerRoute(route.filters));
   };
+
+  // Before the shell, because it replaces it rather than sitting inside
+  // it. Every hook above has already run, so the early return is safe.
+  if (route.view === 'home') {
+    return <HomeView data={data} error={error} onGo={go} onClaim={openClaim} />;
+  }
 
   return (
     <div className="shell">
