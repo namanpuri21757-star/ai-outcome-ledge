@@ -67,7 +67,7 @@ cd web    && npx tsc --noEmit && npm test && npx vite build
 cd worker && npx tsc --noEmit && npm test
 ```
 
-Expected: **375** web tests, **128** worker tests, both typechecks silent, build
+Expected: **410** web tests, **128** worker tests, both typechecks silent, build
 clean with no warnings.
 
 **Look at the screens before you call a UI change done.** The app renders against
@@ -121,8 +121,9 @@ says so.
 
 ## Architecture
 
-Nine surfaces. Three in the nav, two reached by clicking a thing, and four
-covers a visitor crosses before they know what any of it is.
+Nine surfaces, plus one proposal that is not part of them. Three in the nav, two
+reached by clicking a thing, and four covers a visitor crosses before they know
+what any of it is.
 
 ```
 (no hash)             the landing page — the question, one example row, two ways in
@@ -134,7 +135,17 @@ covers a visitor crosses before they know what any of it is.
 #/company/<slug>      one company's whole record, with a generated verdict
 #/method              how a row is coded and how every figure is computed
 #/maintenance         collector health, the checking queue, the submission inbox
+
+#/style               a design proof, reachable only by typing it. Not a surface
 ```
+
+`#/style` is a proposal, not a section. It is absent from `NAV`, reads nothing —
+no Supabase, no props, no corpus row — and renders identically with no database,
+which is why `App.tsx` places it outside the shell's load and error gates. Its
+vocabulary lives in `lib/style.ts` rather than `labels.ts` on purpose: `MethodView`
+renders `glossary()`, so putting proposed terms in the ledger's vocabulary would
+change a shipped screen to stage a proposal. Promote it or delete it; do not let
+it drift into being a permanent unlinked page.
 
 Ten top-level views were reduced to this. `REBUILD.md` has the kill list with a
 reason per view. **A deleted view is deleted, not hidden:** its name is gone from

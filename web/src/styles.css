@@ -1637,7 +1637,17 @@ html, body { overflow-x: hidden; max-width: 100%; }
    is decoration, and decoration is what this page exists to refuse.
    =================================================================== */
 
-.proof { max-width: var(--page); }
+/* Tabular figures are set once, on the root of the page, so they are
+   inherited by prose as well as by columns. Tagging the number classes
+   alone left the figures inside sentences — `22.9 to 56.1 points`,
+   `$8M`, `27 languages` — set in proportional figures, which is the
+   same defect the classes exist to prevent, just somewhere a class
+   never reached. Declaring it here means a numeral cannot be written
+   on this page without it. */
+.proof {
+  max-width: var(--page);
+  font-variant-numeric: tabular-nums;
+}
 
 .proof-head {
   border-bottom: 2px solid var(--ink);

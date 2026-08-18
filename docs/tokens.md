@@ -7,6 +7,11 @@ but has no token, it is listed as a literal so the gap is visible.
 
 Source of record: `web/src/styles.css` unless stated otherwise.
 
+Every line number below was read against the stylesheet as it stood at line
+1,623 — the app before `#/style` was added. The proof page's block was appended
+after that point, so all citations here still resolve unchanged, and none of
+them describe the proof page. Verified 2026-08-17.
+
 ---
 
 ## 1. Color
@@ -222,7 +227,7 @@ SVG stroke widths: `1` (1237, 1503, 1504), `1.5` (1530), `2` (1511, 1516).
 
 ## 9. Border radius
 
-**Zero. One declaration in 1,623 lines, and it is a reset:**
+**Zero. One declaration in the whole stylesheet, and it is a reset:**
 
 ```css
 :focus-visible { ... border-radius: 0; }   /* 118 */

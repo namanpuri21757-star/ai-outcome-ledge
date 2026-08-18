@@ -245,6 +245,15 @@ describe('the page cannot quietly stop being a proof', () => {
     expect(ms).toBeLessThanOrEqual(30);
   });
 
+  it('sets tabular figures on the page root, so prose inherits them', () => {
+    // The number classes cannot reach a numeral written inside a
+    // sentence, and this page has several. Inheriting from `.proof` is
+    // what makes the rule hold everywhere rather than where remembered.
+    const root = css.match(/^\.proof \{[^}]*\}/ms);
+    expect(root, '.proof has no rule').toBeTruthy();
+    expect(root![0]).toContain('tabular-nums');
+  });
+
   it('sets every numeral in tabular figures', () => {
     // Each class the page uses for a number resolves to a tabular rule.
     for (const cls of ['.sched-ref', '.figure-value', '.status-since', '.evrow-ref', '.sweeprow-ref']) {
