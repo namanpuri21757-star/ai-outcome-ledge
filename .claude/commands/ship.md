@@ -15,7 +15,7 @@ small.
    - `cd web && npx tsc --noEmit && npm test && npx vite build`
    - `cd ../worker && npx tsc --noEmit && npm test`
 
-   Expected: 321 web tests, 128 worker tests, silent typechecks, clean build.
+   Expected: 410 web tests, 128 worker tests, silent typechecks, clean build.
    On failure: fix the code, not the test, and re-run the whole gate from the
    top.
 
@@ -28,7 +28,7 @@ small.
    and run the click-through, which asserts what a screenshot cannot:
 
    `cd web && npx vite preview --port 5200` then `npm run walk` in another shell.
-   70 checks at 1440px and 390px. All of them must pass.
+   120 checks at 1440px and 390px. All of them must pass.
 
 3. Commit with a message naming the user-visible change, not the files touched.
    "Company page leads with the margin chart" — not "update CompanyView.tsx".
