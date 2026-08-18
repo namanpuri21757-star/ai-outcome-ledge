@@ -18,6 +18,7 @@ import { ClaimView } from './views/ClaimView';
 import { CompanyView } from './views/CompanyView';
 import { MethodView } from './views/MethodView';
 import { MaintenanceView } from './views/MaintenanceView';
+import { StyleView } from './views/StyleView';
 
 /* ===================================================================
    The shell: load once, route, and get out of the way.
@@ -78,6 +79,7 @@ export default function App() {
   }, []);
 
   const fresh = useMemo(() => freshness(runs), [runs]);
+  const isStyle = route.view === 'style';
 
   const go = (view: ViewName) =>
     navigate(view === 'ledger' ? ledgerRoute(route.filters) : { view, id: null, filters: route.filters });
@@ -135,14 +137,19 @@ export default function App() {
       </header>
 
       <main className="main" id="main">
-        {error && (
+        {/* The proof reads nothing, so it must not sit behind the
+            corpus load: it renders identically with no database, which
+            is the point of it. */}
+        {isStyle && <StyleView />}
+
+        {!isStyle && error && (
           <div className="failure" role="alert">
             <h2>The ledger could not be loaded</h2>
             <p>{error}</p>
           </div>
         )}
 
-        {!error && data === null && (
+        {!isStyle && !error && data === null && (
           <div className="empty">
             <p>Loading the ledger…</p>
           </div>

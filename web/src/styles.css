@@ -1620,3 +1620,337 @@ p { margin: 0 0 var(--s-3); }
    and this keeps it that way if any is ever added. */
 html, body { overflow-x: hidden; max-width: 100%; }
 .main > * { min-width: 0; }
+
+/* ===================================================================
+   THE STYLE PROOF — #/style
+
+   One page, no data, built to be judged and then promoted or thrown
+   away. It introduces no colour: the two accents are the ledger's own
+   green and audit red, carrying `threshold crossed` and `contradicted`
+   and nothing else. Every other state on the page is ink on paper,
+   which is the honest encoding for a record whose middle states are
+   `dormant` and `contested` — colour would imply a reading that has
+   not been made.
+
+   The tickmarks are marks, not pills: a glyph in a hairline box, set
+   in mono, defined in a legend on the same screen. An undefined mark
+   is decoration, and decoration is what this page exists to refuse.
+   =================================================================== */
+
+.proof { max-width: var(--page); }
+
+.proof-head {
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: var(--s-6);
+  margin-bottom: var(--s-10);
+}
+
+.proof-index {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4);
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--ink-3); margin: 0 0 var(--s-3);
+}
+.proof-index-ref {
+  border: 1px solid var(--rule-strong);
+  padding: 0 var(--s-1); color: var(--ink);
+}
+.proof-index-state { color: var(--ink-2); }
+
+.proof-lede {
+  max-width: var(--measure); color: var(--ink-2);
+  font-size: var(--t-md); margin: var(--s-3) 0 var(--s-5);
+}
+
+/* The preparer block. A workpaper says who did it and who checked it,
+   and on this page the second answer is nobody, which is the point. */
+.proof-block {
+  display: grid; gap: var(--s-4);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin: 0 0 var(--s-5);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: var(--s-4) 0;
+}
+.proof-block > div { min-width: 0; }
+.proof-block dt {
+  font-size: var(--t-2xs); text-transform: uppercase;
+  letter-spacing: .07em; color: var(--ink-3); margin-bottom: var(--s-1);
+}
+.proof-block dd { margin: 0; font-size: var(--t-sm); color: var(--ink); }
+.proof-block dd.is-open { color: var(--gap); }
+
+.proof-warning {
+  max-width: var(--measure); font-size: var(--t-sm);
+  color: var(--ink); background: var(--paper-sunk);
+  border-left: 3px solid var(--gap);
+  padding: var(--s-3) var(--s-4); margin: 0;
+}
+
+.proof-section { margin-bottom: var(--s-16); }
+.proof-mark {
+  font-family: var(--font-mono); font-size: var(--t-2xs);
+  letter-spacing: .14em; color: var(--ink-3); margin: 0 0 var(--s-1);
+}
+.proof-note {
+  max-width: var(--measure); color: var(--ink-2);
+  font-size: var(--t-sm); margin: 0 0 var(--s-5);
+}
+.proof-note-tight { margin-bottom: var(--s-2); }
+.proof-count {
+  max-width: var(--measure); font-size: var(--t-sm);
+  color: var(--ink); margin: var(--s-4) 0;
+}
+.proof-aside {
+  max-width: var(--measure); font-size: var(--t-sm); color: var(--ink-2);
+  border-left: 3px solid var(--rule); padding-left: var(--s-4);
+  margin: var(--s-5) 0 0;
+}
+.proof-aside.is-hard {
+  border-left-color: var(--gap); color: var(--ink);
+  background: var(--paper-sunk); padding: var(--s-3) var(--s-4);
+}
+.proof-seg { margin-bottom: var(--s-3); }
+
+/* ---- 1. the ramp ---- */
+
+.ramp { list-style: none; margin: 0; padding: 0; }
+.ramp-row {
+  border-top: 1px solid var(--rule);
+  padding: var(--s-4) 0;
+  display: grid; gap: var(--s-2) var(--s-6);
+  grid-template-columns: minmax(230px, 260px) minmax(0, 1fr);
+  align-items: baseline;
+}
+.ramp-row:last-child { border-bottom: 1px solid var(--rule); }
+.ramp-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3); min-width: 0; }
+.ramp-token { font-size: var(--t-xs); color: var(--ink); }
+.ramp-size { font-size: var(--t-xs); color: var(--ink-3); }
+.ramp-use {
+  flex: 1 1 100%; font-size: var(--t-2xs);
+  text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3);
+}
+.ramp-specimen { min-width: 0; line-height: 1.1; color: var(--ink); }
+.ramp-specimen.is-display { font-family: var(--font-display); font-weight: 600; }
+.ramp-specimen.is-serif { font-family: var(--font-serif); font-weight: 400; }
+.ramp-specimen.is-mono {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+
+/* ---- 2. the tickmarks ---- */
+
+.tick { display: inline-flex; align-items: center; gap: var(--s-1); }
+.tick-mark {
+  font-family: var(--font-mono); font-size: var(--t-xs);
+  width: 1.5em; min-height: 1.5em;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--rule-strong); color: var(--ink);
+}
+.tick-label {
+  font-size: var(--t-2xs); text-transform: uppercase;
+  letter-spacing: .08em; color: var(--ink-2);
+}
+/* The one tier that means somebody can go and check is the one drawn
+   in full ink. The other three step back. */
+.tick[data-tier='observed'] .tick-mark { border-color: var(--ink); }
+.tick[data-tier='observed'] .tick-label { color: var(--ink); }
+.tick[data-tier='asserted'] .tick-mark { border-style: dashed; color: var(--ink-3); }
+.tick[data-tier='asserted'] .tick-label { color: var(--ink-3); }
+
+.ticklist { list-style: none; margin: 0 0 var(--s-6); padding: 0; }
+.tickrow {
+  display: flex; gap: var(--s-4); align-items: flex-start;
+  border-top: 1px solid var(--rule); padding: var(--s-3) 0;
+}
+.tickrow:last-child { border-bottom: 1px solid var(--rule); }
+.tickrow-mark {
+  font-family: var(--font-mono); font-size: var(--t-lg);
+  width: 1.6em; flex: none; text-align: center;
+  border: 1px solid var(--rule-strong); line-height: 1.5;
+}
+.tickrow-body { min-width: 0; }
+.tickrow-label {
+  display: block; font-size: var(--t-sm); font-weight: 600; color: var(--ink);
+}
+.tickrow-meaning {
+  display: block; font-size: var(--t-sm); color: var(--ink-2);
+  max-width: var(--measure); margin-top: var(--s-1);
+}
+.tickdemo { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); margin: 0; }
+
+/* ---- 3. the lead schedule ---- */
+
+/* The one container on this page allowed to scroll sideways, and only
+   below the width at which seven columns stop fitting. The page does
+   not scroll: this does, inside its own rule. */
+.sched-frame { overflow-x: auto; border: 1px solid var(--rule); }
+
+.sched {
+  border-collapse: collapse; width: 100%; min-width: 900px;
+  font-size: var(--t-sm);
+}
+.sched.is-filtered { min-width: 720px; }
+.sched caption { text-align: left; }
+.sched th, .sched td {
+  text-align: left; vertical-align: top;
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--rule);
+}
+.sched thead th {
+  font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-3); font-weight: 600;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--paper-raised);
+  white-space: nowrap;
+}
+.sched tbody tr:last-child th, .sched tbody tr:last-child td { border-bottom: 0; }
+.sched-ref {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  color: var(--ink); font-weight: 600; white-space: nowrap;
+}
+.sched-name { display: block; font-weight: 600; color: var(--ink); }
+.sched-class { display: block; color: var(--ink); }
+.sched-note {
+  display: block; font-size: var(--t-xs); color: var(--ink-3);
+  margin-top: var(--s-1); max-width: 40ch;
+}
+.sched tbody tr.is-gutted { background: var(--paper-sunk); }
+
+.figure { display: block; }
+.figure-value {
+  display: block; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; color: var(--ink);
+  margin-bottom: var(--s-1);
+}
+.figure-value.is-unresolved {
+  font-family: var(--font-display); font-style: italic; color: var(--ink-3);
+}
+.figure-source {
+  display: block; font-size: var(--t-xs); color: var(--ink-3);
+  margin-top: var(--s-1); max-width: 38ch;
+}
+.figure-formula {
+  display: block; font-size: var(--t-xs); color: var(--ink-2);
+  border-left: 3px solid var(--rule); padding-left: var(--s-3);
+  margin-top: var(--s-2); max-width: 38ch;
+}
+.figure-formula-label {
+  display: block; font-size: var(--t-2xs); text-transform: uppercase;
+  letter-spacing: .07em; color: var(--ink-3); margin-bottom: var(--s-1);
+}
+
+.status { display: block; }
+.status-name { display: block; font-weight: 600; }
+.status[data-tone='crossed'] .status-name { color: var(--traced); }
+.status[data-tone='against'] .status-name { color: var(--gap); }
+.status[data-tone='ink'] .status-name { color: var(--ink-2); }
+.status-since {
+  display: block; font-family: var(--font-mono); font-size: var(--t-2xs);
+  font-variant-numeric: tabular-nums; color: var(--ink-3); margin-top: var(--s-1);
+}
+
+/* The cell a withheld figure leaves. It keeps its height on purpose. */
+.struck { display: block; }
+.struck-box {
+  display: block; height: var(--s-6);
+  border: 1px solid var(--rule);
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--paper-deep) 0, var(--paper-deep) 1px,
+    transparent 1px, transparent 7px
+  );
+}
+.struck-why {
+  display: block; font-size: var(--t-xs); color: var(--ink-3);
+  margin-top: var(--s-2); max-width: 34ch;
+}
+.struck-why strong { color: var(--ink-2); font-weight: 600; }
+
+.evlist { list-style: none; margin: 0; padding: 0; }
+.evrow {
+  display: flex; gap: var(--s-4); align-items: flex-start;
+  border-top: 1px solid var(--rule); padding: var(--s-3) 0;
+}
+.evrow:last-child { border-bottom: 1px solid var(--rule); }
+.evrow-ref {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-xs); color: var(--ink-2);
+  flex: none; min-width: 4.5em;
+}
+.evrow-body { min-width: 0; }
+.evrow-text { display: block; font-size: var(--t-sm); color: var(--ink); max-width: var(--measure); }
+.evrow-foot {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--s-2) var(--s-4); margin-top: var(--s-2);
+}
+.evrow-source { font-size: var(--t-xs); color: var(--ink-3); }
+
+/* ---- 4. the sweep ---- */
+
+/* Scrolls inside its own frame below the width the drawing needs, for
+   the reason the price chart does: an SVG sized to the viewport scales
+   its own type down with it, and at 390px the axis would set at about
+   six pixels. A floor that bends is not a floor. The page still does
+   not scroll; this does. */
+.sweep-frame {
+  overflow-x: auto; min-width: 0;
+  border: 1px solid var(--rule); background: var(--paper-raised);
+}
+.sweep { display: block; width: 100%; min-width: 640px; height: auto; }
+
+.sweep-grid { stroke: var(--rule); stroke-width: 1; }
+.sweep-spine { stroke: var(--rule-strong); stroke-width: 1; }
+.sweep-hatch { stroke: var(--rule-strong); stroke-width: 1; }
+
+.sweep-axis, .sweep-ref, .sweep-read, .sweep-cost-label {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.sweep-axis { font-size: var(--t-2xs); fill: var(--ink-3); }
+.sweep-ref { font-size: var(--t-xs); fill: var(--ink); }
+.sweep-read {
+  font-size: var(--t-2xs); fill: var(--ink-3);
+  text-transform: uppercase; letter-spacing: .07em;
+}
+.sweep-cost-label { font-size: var(--t-2xs); fill: var(--ink-2); }
+
+.sweep-cost-zone { fill: var(--paper-sunk); }
+.sweep-cost-line { stroke: var(--ink); stroke-width: 2; }
+
+/* A solid fill is reserved for a band somebody observed. Everything
+   below that tier keeps the accent in its edge and its hatch, so the
+   interval reads as a range that was estimated rather than a block
+   that was measured. */
+.sweep-band { fill: var(--paper-deep); stroke: var(--rule-strong); stroke-width: 2; }
+.sweep-band[data-tone='crossed'] { fill: var(--traced); stroke: var(--traced); }
+.sweep-band[data-tone='against'] { fill: var(--gap); stroke: var(--gap); }
+/* The edge keeps the accent; the fill gives it up. Set here rather
+   than as a presentation attribute because CSS wins over one, and a
+   band that quietly stayed solid is the defect this rule exists for. */
+.sweep-band[data-tone='crossed']:not([data-tier='observed']) { fill: url(#sweep-band-crossed); }
+.sweep-band[data-tone='against']:not([data-tier='observed']) { fill: url(#sweep-band-against); }
+.sweep-band-ground { fill: var(--paper-raised); }
+.sweep-stripe-crossed { stroke: var(--traced); stroke-width: 2.5; }
+.sweep-stripe-against { stroke: var(--gap); stroke-width: 2.5; }
+.sweep-absent { stroke: var(--rule); stroke-width: 1; }
+
+.sweeplist { list-style: none; margin: var(--s-4) 0 0; padding: 0; }
+.sweeprow {
+  display: flex; gap: var(--s-4); align-items: flex-start;
+  border-top: 1px solid var(--rule); padding: var(--s-3) 0;
+}
+.sweeprow:last-child { border-bottom: 1px solid var(--rule); }
+.sweeprow-ref {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-xs); color: var(--ink-2); flex: none; min-width: 4.5em;
+}
+.sweeprow-body {
+  min-width: 0; font-size: var(--t-sm); color: var(--ink-2);
+  max-width: var(--measure);
+  display: flex; flex-direction: column; gap: var(--s-2); align-items: flex-start;
+}
+.sweeprow-body strong { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 720px) {
+  .ramp-row { grid-template-columns: 1fr; }
+  .proof-block { grid-template-columns: 1fr 1fr; }
+}

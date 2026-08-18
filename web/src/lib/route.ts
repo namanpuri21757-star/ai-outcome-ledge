@@ -14,6 +14,12 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
      #/company/<slug>      one company's whole record
      #/method              how a row is coded, generated from labels.ts
      #/maintenance         collector health, the checking queue, submit
+     #/style               a static design proof, reading nothing
+
+   `#/style` is deliberately absent from `NAV`: it is a proposal to be
+   judged and then promoted or removed, not a section of the product,
+   and putting it in the nav would change every other screen to stage
+   it. It is reached by typing the address.
 
    ── Why the landing page is the empty hash ────────────────────────
 
@@ -42,10 +48,12 @@ import type { ClaimKind, MeasurementBasis, VerificationStatus } from './types';
 
 export type ViewName =
   | 'home' | 'thesis' | 'directory' | 'prices'
-  | 'ledger' | 'claim' | 'company' | 'method' | 'maintenance';
+  | 'ledger' | 'claim' | 'company' | 'method' | 'maintenance'
+  | 'style';
 
 const KNOWN: ViewName[] = [
   'home', 'thesis', 'directory', 'prices', 'ledger', 'claim', 'company', 'method', 'maintenance',
+  'style',
 ];
 
 /** The four that render outside the shell: dark, no masthead, no footer. */
